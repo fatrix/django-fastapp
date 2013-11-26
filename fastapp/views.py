@@ -169,7 +169,7 @@ class DjendBaseView(View, ContextMixin):
 
 
 def get_dropbox_auth_flow(web_app_session):
-    redirect_uri = "http://localhost:8000/fastapp/dropbox_auth_finish"
+    redirect_uri = "%s/fastapp/dropbox_auth_finish" % settings.DROPBOX_REDIRECT_URL
     dropbox_consumer_key = settings.DROPBOX_CONSUMER_KEY
     dropbox_consumer_secret = settings.DROPBOX_CONSUMER_SECRET
     return dropbox.client.DropboxOAuth2Flow(dropbox_consumer_key, dropbox_consumer_secret, redirect_uri, web_app_session, "dropbox-auth-csrf-token")
@@ -191,7 +191,7 @@ def dropbox_auth_finish(request):
         auth.user = request.user
         auth.save()
 
-        return HttpResponseRedirect("/fastapp/index")
+        return HttpResponseRedirect("/fastapp/")
     except dropbox.client.DropboxOAuth2Flow.BadRequestException, e:
         return HttpResponseBadRequest(e)
     except dropbox.client.DropboxOAuth2Flow.BadStateException, e:
