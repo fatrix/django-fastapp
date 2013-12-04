@@ -11,15 +11,40 @@ class Migration(SchemaMigration):
         # Adding model 'AuthProfile'
         db.create_table(u'fastapp_authprofile', (
             (u'id', self.gf('django.db.models.fields.AutoField')(primary_key=True)),
-            ('user', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['auth.User'])),
+            ('user', self.gf('django.db.models.fields.related.OneToOneField')(related_name='authprofile', unique=True, to=orm['auth.User'])),
             ('access_token', self.gf('django.db.models.fields.CharField')(max_length=72)),
         ))
         db.send_create_signal(u'fastapp', ['AuthProfile'])
+
+        # Adding model 'Base'
+        db.create_table(u'fastapp_base', (
+            (u'id', self.gf('django.db.models.fields.AutoField')(primary_key=True)),
+            ('name', self.gf('django.db.models.fields.CharField')(max_length=32)),
+            ('uuid', self.gf('django.db.models.fields.CharField')(max_length=36, blank=True)),
+            ('content', self.gf('django.db.models.fields.CharField')(max_length=8192)),
+            ('user', self.gf('django.db.models.fields.related.ForeignKey')(default=0, related_name='+', blank=True, to=orm['auth.User'])),
+        ))
+        db.send_create_signal(u'fastapp', ['Base'])
+
+        # Adding model 'Exec'
+        db.create_table(u'fastapp_exec', (
+            (u'id', self.gf('django.db.models.fields.AutoField')(primary_key=True)),
+            ('name', self.gf('django.db.models.fields.CharField')(max_length=64)),
+            ('module', self.gf('django.db.models.fields.CharField')(max_length=8192)),
+            ('base', self.gf('django.db.models.fields.related.ForeignKey')(blank=True, related_name='execs', null=True, to=orm['fastapp.Base'])),
+        ))
+        db.send_create_signal(u'fastapp', ['Exec'])
 
 
     def backwards(self, orm):
         # Deleting model 'AuthProfile'
         db.delete_table(u'fastapp_authprofile')
+
+        # Deleting model 'Base'
+        db.delete_table(u'fastapp_base')
+
+        # Deleting model 'Exec'
+        db.delete_table(u'fastapp_exec')
 
 
     models = {
@@ -63,7 +88,22 @@ class Migration(SchemaMigration):
             'Meta': {'object_name': 'AuthProfile'},
             'access_token': ('django.db.models.fields.CharField', [], {'max_length': '72'}),
             u'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
-            'user': ('django.db.models.fields.related.ForeignKey', [], {'to': u"orm['auth.User']"})
+            'user': ('django.db.models.fields.related.OneToOneField', [], {'related_name': "'authprofile'", 'unique': 'True', 'to': u"orm['auth.User']"})
+        },
+        u'fastapp.base': {
+            'Meta': {'object_name': 'Base'},
+            'content': ('django.db.models.fields.CharField', [], {'max_length': '8192'}),
+            u'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
+            'name': ('django.db.models.fields.CharField', [], {'max_length': '32'}),
+            'user': ('django.db.models.fields.related.ForeignKey', [], {'default': '0', 'related_name': "'+'", 'blank': 'True', 'to': u"orm['auth.User']"}),
+            'uuid': ('django.db.models.fields.CharField', [], {'max_length': '36', 'blank': 'True'})
+        },
+        u'fastapp.exec': {
+            'Meta': {'object_name': 'Exec'},
+            'base': ('django.db.models.fields.related.ForeignKey', [], {'blank': 'True', 'related_name': "'execs'", 'null': 'True', 'to': u"orm['fastapp.Base']"}),
+            u'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
+            'module': ('django.db.models.fields.CharField', [], {'max_length': '8192'}),
+            'name': ('django.db.models.fields.CharField', [], {'max_length': '64'})
         }
     }
 

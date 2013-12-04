@@ -1,6 +1,8 @@
+import datetime
+import logging
+from django.contrib import messages
 import dropbox
 from dropbox.rest import ErrorResponse
-from fastapp.models import AuthProfile
 
 
 class UnAuthorized(Exception):
@@ -17,8 +19,8 @@ class NoBasesFound(Exception):
 
 class Connection(object):
 
-    def __init__(self, username):
-        self.client = dropbox.client.DropboxClient(AuthProfile.objects.get(user__username=username).access_token)
+    def __init__(self, access_token):
+        self.client = dropbox.client.DropboxClient(access_token)
         super(Connection, self).__init__()
 
     def info(self):
@@ -45,7 +47,19 @@ class Connection(object):
         except ErrorResponse, e:
             if e.__dict__['status'] == 401:
                 raise UnAuthorized(e.__dict__['body']['error'])
+            if e.__dict__['status'] == 401:
+                raise NotFound(e.__dict__['body']['error'])
             raise e
         except Exception, e:
             raise e
 
+
+def message(request, level, message):
+    dt = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if level == logging.ERROR:
+        tag = "alert-danger"
+    elif level == logging.INFO:
+        tag = "alert-info"
+    elif level == logging.WARN:
+        tag = "alert-info"
+    messages.error(request, dt + " " + str(message)[:1000], extra_tags="%s safe" % tag)

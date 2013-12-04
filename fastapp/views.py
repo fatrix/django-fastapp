@@ -1,10 +1,10 @@
 import logging
-import json
-import datetime
+import traceback
 
 from django.contrib import messages
-from django.shortcuts import render_to_response
-from django.template import TemplateDoesNotExist, RequestContext, Template
+from django.contrib.auth.models import User
+from django.shortcuts import get_object_or_404
+from django.template import RequestContext
 from django.template.loader import render_to_string
 from django.views.generic import View
 from django.http import *
@@ -12,9 +12,10 @@ from django.views.generic.base import ContextMixin
 from django.conf import settings
 import dropbox
 from dropbox.rest import ErrorResponse
+from fastapp.utils import message
 
 from utils import UnAuthorized, Connection, NoBasesFound
-from fastapp.models import AuthProfile
+from fastapp.models import AuthProfile, Base
 
 
 class DjendStaticView(View):
@@ -22,12 +23,10 @@ class DjendStaticView(View):
     def get(self, request, *args, **kwargs):
         static_path = "%s/%s/%s" % (kwargs['base'], "static", kwargs['name'])
         try:
-            auth_profile, created = AuthProfile.objects.get_or_create(user=request.user)
-            if created:
-                auth_profile.save()
-                return HttpResponseRedirect("/fastapp/dropbox_auth_start")
 
-            client = dropbox.client.DropboxClient(auth_profile.access_token)
+            base_model = Base.objects.get(name=kwargs['base'])
+            auth_token = base_model.user.authprofile.access_token
+            client = dropbox.client.DropboxClient(auth_token)
             f = client.get_file(static_path).read()
 
             # default
@@ -46,7 +45,7 @@ class DjendStaticView(View):
 class DjendMixin(object):
 
     def connection(self, request):
-        return Connection(request.user.username)
+        return Connection(request.user.authprofile.access_token)
 
 
 class DjendExecView(View, DjendMixin):
@@ -68,14 +67,12 @@ class DjendExecView(View, DjendMixin):
 
     def get(self, request, *args, **kwargs):
         base = kwargs['base']
+        exec_id = kwargs['id']
+        base_model = Base.objects.get(name=base)
+        exec_model = base_model.execs.get(name=exec_id)
 
-        connection = self.connection(request)
-
-        base_config = json.loads(connection.get_file(base+"/app.json"))
-        py_name = base_config[kwargs['id']]
-        py_module = connection.get_file(base+"/"+py_name)
         do_kwargs = {'request': request}
-        data = self._do(py_module, do_kwargs)
+        data = self._do(exec_model.module, do_kwargs)
         data.update({'id': kwargs['id']})
 
         if data['status'] == self.STATE_NOK:
@@ -87,64 +84,109 @@ class DjendExecView(View, DjendMixin):
         return HttpResponseRedirect("/fastapp/%s/index/" % base)
 
 
-def message(request, level, message):
-    dt = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if level == logging.ERROR:
-        tag = "alert-danger"
-    elif level == logging.INFO:
-        tag = "alert-info"
-    elif level == logging.WARN:
-        tag = "alert-info"
-    messages.error(request, dt + " " + str(message)[:1000], extra_tags="%s safe" % tag)
+class DjendSharedView(View, ContextMixin):
+
+    def get(self, request, *args, **kwargs):
+        context = RequestContext(request)
+        base_name = kwargs.get('base')
+        shared_key = request.GET.get('shared_key')
+
+        if not shared_key:
+            shared_key = request.session.get('shared_key')
+
+        base_model = get_object_or_404(Base, name=base_name, uuid=shared_key)
+        # store it in session list
+        if not request.session.__contains__('shared_bases'):
+            request.session['shared_bases'] = {}
+        request.session['shared_bases'][base_name] = shared_key
+        request.session.modified = True
+
+        # context
+        context['shared_bases'] = request.session['shared_bases']
+        context['FASTAPP_EXECS'] = base_model.execs.all()
+        context['active_base'] = base_model
+        context['FASTAPP_NAME'] = base_model.name
+        context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base_model.name)
+
+        rs = base_model.template(context)
+        return HttpResponse(rs)
 
 
 class DjendBaseView(View, ContextMixin):
+
+    def _refresh_bases(self, username):
+        connection = Connection(AuthProfile.objects.get(user__username=username).access_token)
+        bases = connection.listing()
+        for remote_base in bases:
+            remote_base, created = Base.objects.get_or_create(name=remote_base, user=User.objects.get(username=username))
+            remote_base.save()
+
+        refreshed_bases = []
+        for base in Base.objects.filter(user__username=username):
+            if base.name in bases:
+                logging.debug("refresh base '%s'" % base)
+                try:
+                    base.refresh()
+                    base.save()
+                except Exception, e:
+                    print traceback.format_exc()
+
+                refreshed_bases.append(base)
+            else:
+                base.delete()
+
+        return refreshed_bases
+
+    def _refresh_single_base(self, base):
+        base = Base.objects.get(name=base)
+        base.refresh()
+        base.save()
 
     def get(self, request, *args, **kwargs):
         rs = None
         context = RequestContext(request)
 
-        try:
-            connection = Connection(request.user.username)
+        # redirect to shared view
+        if not request.user.is_authenticated():
+            if request.GET.has_key('shared_key') or request.session.__contains__("shared_key"):
+                return DjendSharedView.as_view()(request, *args, **kwargs)
 
-            # bases
+        try:
+            # refresh bases from dropbox
             refresh = "refresh" in request.GET
-            if request.session.get('bases') is None or refresh:
-                request.session['bases'] = connection.listing()
-            if refresh:
+
+            base = kwargs.get('base')
+
+            #if request.session.get('bases') is None or refresh:
+            if refresh and base:
+                self._refresh_single_base(base)
+            elif refresh:
+                self._refresh_bases(request.user.username)
                 return HttpResponseRedirect("/fastapp/")
 
-            # base and config (app.json)
-            base = kwargs.get('base')
-            base_config = {}
+            base_model = None
             if base:
+                base_model = get_object_or_404(Base, name=base, user=request.user.id)
+                base_model.save()
+
+                # execs
                 try:
-                    request.session['base_config'] = json.loads(connection.get_file(base+"/app.json"))
+                    context['FASTAPP_EXECS'] = base_model.execs.all()
                 except ErrorResponse, e:
-                    messages.warning(request, "No %s/app.json found" % base, extra_tags="alert-warning")
+                    messages.warning(request, "No app.json found", extra_tags="alert-warning")
                     logging.debug(e)
-                base_config = request.session['base_config']
 
+            # context
             try:
-                context['DJEND_EXECS'] = base_config.keys()
-            except ErrorResponse, e:
-                messages.warning(request, "No app.json found", extra_tags="alert-warning")
-                logging.debug(e)
-            try:
-                context['bases'] = request.session['bases']
-                context['FASTAPP_NAME'] = base
-
+                context['bases'] = Base.objects.filter(user=request.user).order_by('name')
                 if base is not None:
+                    context['FASTAPP_NAME'] = base
                     context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base)
-
-                if base is None:
+                    context['active_base'] = base_model
+                    rs = base_model.template(context)
+                else:
                     template_name = "fastapp/index.html"
                     rs = render_to_string(template_name, context_instance=context)
-                else:
-                    template_name = "%s/index.html" % base
-                    templ = connection.get_file(template_name)
-                    t = Template(templ)
-                    rs = t.render(context)
 
             except ErrorResponse, e:
                 if e.__dict__['status'] == 404:
@@ -152,15 +194,16 @@ class DjendBaseView(View, ContextMixin):
                     logging.debug("Template not found")
                     messages.error(request, "Template %s not found" % template_name, extra_tags="alert-danger")
 
+        # error handling
         except (UnAuthorized, AuthProfile.DoesNotExist), e:
-            print e
+            print traceback.format_exc()
             return HttpResponseRedirect("/fastapp/dropbox_auth_start")
         except NoBasesFound, e:
-            print e
+            print traceback.format_exc()
             message(request, logging.WARNING, "No bases found")
-        except Exception, e:
-            print e
-            return HttpResponseServerError()
+        #except Exception, e:
+        #    print traceback.format_exc()
+        #    return HttpResponseServerError()
 
         if not rs:
             rs = render_to_string("fastapp/index.html", context_instance=context)
@@ -204,3 +247,22 @@ def dropbox_auth_finish(request):
     except dropbox.client.DropboxOAuth2Flow.ProviderException, e:
         raise e
 
+
+def my_login_required(function):
+    def wrapper(request, *args, **kwargs):
+        user=request.user
+        # if logged in
+        if user.is_authenticated():
+            return function(request, *args, **kwargs)
+        # if shared key in query string
+        if request.GET.has_key('shared_key'):
+            shared_key = request.GET.get('shared_key')
+            base_name = kwargs.get('base')
+            get_object_or_404(Base, name=base_name, uuid=shared_key)
+            request.session['shared_key'] = shared_key
+            return function(request, *args, **kwargs)
+        # if shared key in session
+        if request.session.__contains__('shared_key'):
+            return function(request, *args, **kwargs)
+        return HttpResponseRedirect("/admin/")
+    return wrapper

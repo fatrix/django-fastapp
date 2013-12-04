@@ -1,88 +1,116 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    {% block header %}
-    <script src="https://code.jquery.com/jquery-1.10.1.min.js"/>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
 
-    <!-- Latest compiled and minified JavaScript -->
-    <script src="https://netdna.bootstrapcdn.com/bootstrap/3.0.2/js/bootstrap.min.js"></script>
-    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.2/css/bootstrap.min.css">
+    <title>Fastapp</title>
 
-    <!-- Optional theme -->
-    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.2/css/bootstrap-theme.min.css">
+    <!-- Bootstrap core CSS -->
+    <link href="/static/bare/css/bootstrap.css" rel="stylesheet">
+    <script src="http://code.jquery.com/jquery-1.10.2.min.js"></script>
 
-    <style type="text/css">
-            /*div#fastapp { background-color: darkgrey ; border-style:0px; margin: 0px}*/
-        div#btn-group {
-            margin-top: 20px;
-        }
-
+    <!-- Add custom CSS here -->
+    <style>
         body {
-            padding-top: 50px;
+            margin-top: 60px;
         }
 
-        .content {
-            padding: 40px 15px;
+        li a.active {
+            background-color: darkgrey;
         }
     </style>
-
-    <script type="text/javascript">
-        $(document).ready(function () {
-            $("button.base").click(function () {
-                window.location.replace("/fastapp/" + $(this).text() + "/index");
-            });
-        });
-    </script>
-    {% endblock %}
 
     {% block extra_header %}
     {% endblock %}
 
 </head>
+
 <body>
-<div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+
+<nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
     <div class="container">
         <div class="navbar-header">
-            <a class="navbar-brand" href="/fastapp/?refresh">Fastapp</a>
-            <!--<a class="navbar-brand" href="#">Bases for {{ DROPBOX_USERNAME }}</a>-->
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="/fastapp/">Fastapp</a>
         </div>
-        <div class="collapse navbar-collapse">
-            <form class="navbar-form form-inline">
-                <div class="btn-group">
-                    {% for base in bases %}
-                    {% ifequal FASTAPP_NAME base %}
-                    <div class="btn-group">
-                        <button class="btn btn-{% ifequal FASTAPP_NAME base %}success{% endifequal %}  dropdown-toggle"
-                                data-toggle="dropdown">{{ base }} <span class="caret"></span></button>
 
-                        <ul class="dropdown-menu">
-                            {% for exec in DJEND_EXECS %}
-                            <li><a href="/fastapp/{{ FASTAPP_NAME }}/exec/{{exec}}/">{{ exec }}</a></li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                    {% else %}
-
-                    <button type="button" class="base btn btn-default {% ifequal FASTAPP_NAME base %}btn-danger{% endifequal %}">{{ base }}</button>
-
-                    {% endifequal %}
-                    {% endfor %}
-                </div>
-            </form>
+        <div class="collapse navbar-collapse navbar-ex1-collapse">
+            {% if user.is_authenticated %}
+            <ul class="nav navbar-nav navbar-right">
+                <li><a href=".?refresh">Refresh</a></li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">My Bases<b class="caret"></b></a>
+                    <ul class="dropdown-menu">
+                        {% for base in bases %}
+                        <li><a class="{% ifequal active_base base %}active{%endifequal%}"
+                               href="/fastapp/{{ base.name }}/index/">{{ base.name }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </li>
+            </ul>
+            {% endif %}
+            {% if not user.is_authenticated %}
+            <ul class="nav navbar-nav navbar-right">
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Shared Bases<b class="caret"></b></a>
+                    <ul class="dropdown-menu">
+                        {% for name, shared_key in shared_bases.items %}
+                        <li><a class="{% ifequal active_base base %}active{%endifequal%}"
+                               href="/fastapp/{{ name }}/index/?shared_key={{ shared_key }}">{{ name }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </li>
+            </ul>
+            {% endif %}
         </div>
     </div>
+</nav>
 
-    <!--/.nav-collapse -->
 </div>
+
+<!-- /.container -->
 
 <div class="container">
-    <div class="content">
-        {% for message in messages %}
-            <div class="alert {{ message.tags }}">{{ message|safe }}</div>
-        {% endfor %}
 
-        {% block content %}
-        {% endblock %}
+    <div class="row">
+        <div class="col-lg-12">
+            {% if FASTAPP_NAME %}
+            <h1>{{ FASTAPP_NAME }} <a href="{{ active_base.shared }}">
+                {% if user.is_authenticated %}
+                <button type="button" class="btn btn-default btn-xs">
+                    <span class="glyphicon glyphicon-share"></span> Share
+                </button>
+                {% endif %}
+            </a></h1>
+
+
+            {% for exec in FASTAPP_EXECS %}
+            <li><a href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/">{{ exec.name}}</a></li>
+            {% endfor %}
+            {% endif %}
+
+            {% for message in messages %}
+            <div class="alert {{ message.tags }}">{{ message|safe }}</div>
+            {% endfor %}
+            {% block content %}
+            {% endblock %}
+
+        </div>
     </div>
 </div>
+<!-- /.container -->
+
+<!-- JavaScript -->
+<script src="/static/bare/js/bootstrap.js"></script>
+
+
 </body>
 </html>
