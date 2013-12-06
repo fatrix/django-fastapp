@@ -38,3 +38,4 @@ nosetests.xml
 # PyCharm
 **/.idea/*
 **.DS_Store
+.codeintel/

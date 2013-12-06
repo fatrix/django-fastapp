@@ -97,6 +97,10 @@
             {% endfor %}
             {% endif %}
 
+            {% if LAST_EXEC %}
+            <h3>{{ LAST_EXEC }}</h3>
+            {% endif %}
+
             {% for message in messages %}
             <div class="alert {{ message.tags }}">{{ message|safe }}</div>
             {% endfor %}

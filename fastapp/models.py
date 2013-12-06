@@ -34,12 +34,22 @@ class Base(models.Model):
 
         # execs
         app_config = "%s/app.json" % self.name
-        app_config_json = connection.get_file(app_config)
-        for name, value in json.loads(app_config_json).iteritems():
+        app_config_json = json.loads(connection.get_file(app_config))
+        for name, value in app_config_json.iteritems():
             module_content = connection.get_file("%s/%s" % (self.name, value))
+            # save new exec
             app_exec_model, created = Exec.objects.get_or_create(base=self, name=name)
             app_exec_model.module = module_content
             app_exec_model.save()
+            
+        # delete old exec
+        print app_config_json
+        for local_exec in Exec.objects.filter(base=self).values('name'):
+            if local_exec['name'] in app_config_json:
+                print "exists"
+            else:
+                Exec.objects.get(base=self, name=local_exec['name']).delete()
+
 
     def template(self, context):
         t = Template(self.content)
