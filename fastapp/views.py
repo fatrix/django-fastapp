@@ -1,5 +1,6 @@
 import logging
 import traceback
+import json
 
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -74,12 +75,16 @@ class DjendExecView(View, DjendMixin):
         data = self._do(exec_model.module, do_kwargs)
         data.update({'id': kwargs['id']})
 
-        if data['status'] == self.STATE_NOK:
-            message(request, logging.ERROR, data)
-        else:
-            message(request, logging.INFO, data)
+
         if isinstance(data['returned'], HttpResponseRedirect):
+            if data['status'] == self.STATE_NOK:
+                message(request, logging.ERROR, data)
+            else:
+                message(request, logging.INFO, data)
             return data['returned']
+
+        elif request.GET.has_key('json'):
+            return HttpResponse(json.dumps(data), content_type="application/json")
 
         return HttpResponseRedirect("/fastapp/%s/index/?done=%s" % (base, exec_id))
 
@@ -103,7 +108,7 @@ class DjendSharedView(View, ContextMixin):
 
         # context
         context['shared_bases'] = request.session['shared_bases']
-        context['FASTAPP_EXECS'] = base_model.execs.all()
+        context['FASTAPP_EXECS'] = base_model.execs.all().order_by('name')
         context['LAST_EXEC'] = request.GET.get('done')
         context['active_base'] = base_model
         context['FASTAPP_NAME'] = base_model.name
@@ -153,9 +158,6 @@ class DjendBaseView(View, ContextMixin):
             if request.GET.has_key('shared_key') or request.session.__contains__("shared_key"):
                 return DjendSharedView.as_view()(request, *args, **kwargs)
 
-        import pprint
-        pprint.pprint(request.META)
-
         try:
             # refresh bases from dropbox
             refresh = "refresh" in request.GET
@@ -176,14 +178,14 @@ class DjendBaseView(View, ContextMixin):
 
                 # execs
                 try:
-                    context['FASTAPP_EXECS'] = base_model.execs.all()
+                    context['FASTAPP_EXECS'] = base_model.execs.all().order_by('name')
                 except ErrorResponse, e:
                     messages.warning(request, "No app.json found", extra_tags="alert-warning")
                     logging.debug(e)
 
             # context
             try:
-                context['bases'] = Base.objects.filter(user=request.user).order_by('name')
+                context['bases'] = Base.objects.filter(user=request.user.id).order_by('name')
                 if base is not None:
                     context['FASTAPP_NAME'] = base
                     context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
@@ -255,7 +257,7 @@ def dropbox_auth_finish(request):
         raise e
 
 
-def my_login_required(function):
+def login_or_sharedkey(function):
     def wrapper(request, *args, **kwargs):
         user=request.user
         # if logged in

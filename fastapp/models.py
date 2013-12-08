@@ -36,6 +36,8 @@ class Base(models.Model):
         app_config = "%s/app.json" % self.name
         app_config_json = json.loads(connection.get_file(app_config))
         for name, value in app_config_json.iteritems():
+            if name.startswith("__"):
+                continue
             module_content = connection.get_file("%s/%s" % (self.name, value))
             # save new exec
             app_exec_model, created = Exec.objects.get_or_create(base=self, name=name)
