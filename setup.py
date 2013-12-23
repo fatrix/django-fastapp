@@ -8,6 +8,6 @@ setup(name='fastapp',
       					'django_extensions==1.1.1', 
 						'pusher==0.8',
 						'mongoengine==0.8.6',
-						'pymongo==2.6.3]'
+						'pymongo==2.6.3'
 						]
 )
