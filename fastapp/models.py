@@ -36,7 +36,7 @@ class Base(models.Model):
 
         # execs
         app_config = "%s/app.config" % self.name
-        config = ConfigParser.RawConfigParser(allow_no_value=True)
+        config = ConfigParser.RawConfigParser()
         config.readfp(io.BytesIO(connection.get_file(app_config)))
         for name in config.sections():
             module_name = config.get(name, "module")
