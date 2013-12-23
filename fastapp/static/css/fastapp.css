@@ -1,0 +1,27 @@
+div#messages {
+	background-color: black;
+	font-family: "Lucida Console", Monaco, monospace;
+	font-size: 0.8em;
+	padding: 10px;
+}
+div#messages p {
+	line-height: 1em;	
+}
+div#messages p.debug {
+	color: grey;
+}
+div#messages p.error {
+	color: red;
+}
+div#messages p.info {
+	color: green;
+}
+div#messages p.warn {
+	color: orange;
+}
+body {
+	margin-top: 60px;
+}
+li a.active {
+	background-color: darkgrey;
+}
