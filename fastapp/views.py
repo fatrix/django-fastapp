@@ -1,6 +1,9 @@
 import logging
 import traceback
 import json
+import datetime
+import copy
+import pusher
 
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -50,18 +53,46 @@ class DjendMixin(object):
 
 class DjendExecView(View, DjendMixin):
     STATE_OK = "OK"
-    STATE_NOK = "ERROR"
+    STATE_NOK = "NOK"
+
 
     def _do(self, sfunc, do_kwargs):
-        func = None;  exception = None;  returned = None
+        exception = None;  returned = None
         status = self.STATE_OK
 
-        exec sfunc
+        func = None 
+
+        request = do_kwargs['request']
+        username = copy.copy(do_kwargs['request'].user.username)
+
+        # debug incoming request
+        #from pprint import pprint
+        #pprint(request)
+        if request.method == "GET":
+            query_string = copy.copy(request.GET)
+        else:
+            query_string = copy.copy(request.POST)
+        query_string.pop('json')
+
+        debug(username, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
 
         try:
-            returned = func(**do_kwargs)
+
+            exec sfunc
+            func.username=username
+            func.request=do_kwargs['request']
+            func.session=do_kwargs['request'].session
+            func.info=info
+            func.GET=copy.deepcopy(request.GET)
+            func.POST=copy.deepcopy(request.POST)
+            func.debug=debug
+            func.warn=warn
+            func.error=error
+
+            returned = func(func)
         except Exception, e:
             exception = "%s: %s" % (type(e).__name__, e.message)
+            traceback.print_exc()
             status = self.STATE_NOK
         return {'status': status, 'returned': returned, 'exception': exception}
 
@@ -75,16 +106,18 @@ class DjendExecView(View, DjendMixin):
         data = self._do(exec_model.module, do_kwargs)
         data.update({'id': kwargs['id']})
 
-
-        if isinstance(data['returned'], HttpResponseRedirect):
-            if data['status'] == self.STATE_NOK:
-                message(request, logging.ERROR, data)
+        if request.GET.has_key('json'):
+            if data['status'] == "OK":
+                user_message(logging.INFO, request.user.username, str(data))
+            elif data['status'] == "NOK":
+                user_message(logging.ERROR, request.user.username, str(data))
+            if isinstance(data['returned'], HttpResponseRedirect):
+                #return data
+                location = data['returned']['Location']
+                user_message(logging.INFO, request.user.username, "Redirect to: %s" % location)
+                return HttpResponse(json.dumps(data['returned']['Location']), content_type="application/json")
             else:
-                message(request, logging.INFO, data)
-            return data['returned']
-
-        elif request.GET.has_key('json'):
-            return HttpResponse(json.dumps(data), content_type="application/json")
+                return HttpResponse(json.dumps(data), content_type="application/json")
 
         return HttpResponseRedirect("/fastapp/%s/index/?done=%s" % (base, exec_id))
 
@@ -189,6 +222,9 @@ class DjendBaseView(View, ContextMixin):
                 if base is not None:
                     context['FASTAPP_NAME'] = base
                     context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
+                    #import pprint
+                    #pprint.pprint(settings.pusher_key)
+                    #context['pusher_key'] = settings.pusher_key
                     context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base)
                     context['active_base'] = base_model
                     context['LAST_EXEC'] = request.GET.get('done')
@@ -275,3 +311,31 @@ def login_or_sharedkey(function):
             return function(request, *args, **kwargs)
         return HttpResponseRedirect("/admin/")
     return wrapper
+
+def user_message(level, username, message):
+
+    p = pusher.Pusher(
+      app_id=settings.PUSHER_APP_ID,
+      key=settings.PUSHER_KEY,
+      secret=settings.PUSHER_SECRET
+    )
+    now = datetime.datetime.now()
+    if level == logging.INFO:
+        class_level = "info"        
+    elif level == logging.DEBUG:
+        class_level = "debug"        
+    elif level == logging.WARNING:
+        class_level = "warn"        
+    elif level == logging.ERROR:
+        class_level = "error"        
+
+    p[username].trigger('console_msg', {'datetime': str(now), 'message': str(message), 'class': class_level})
+
+def info(username, gmessage): 
+        return user_message(logging.INFO, username, gmessage)
+def debug(username, gmessage): 
+        return user_message(logging.DEBUG, username, gmessage)
+def error(username, gmessage): 
+        return user_message(logging.ERROR, username, gmessage)
+def warn(username, gmessage): 
+        return user_message(logging.WARN, username, gmessage)

@@ -5,6 +5,8 @@ from django.contrib.auth.models import User
 from django.template import Template
 from django_extensions.db.fields import UUIDField
 from fastapp.utils import Connection
+import ConfigParser
+import io
 
 
 class AuthProfile(models.Model):
@@ -33,21 +35,20 @@ class Base(models.Model):
         self.content = template_content
 
         # execs
-        app_config = "%s/app.json" % self.name
-        app_config_json = json.loads(connection.get_file(app_config))
-        for name, value in app_config_json.iteritems():
-            if name.startswith("__"):
-                continue
-            module_content = connection.get_file("%s/%s" % (self.name, value))
+        app_config = "%s/app.config" % self.name
+        config = ConfigParser.RawConfigParser(allow_no_value=True)
+        config.readfp(io.BytesIO(connection.get_file(app_config)))
+        for name in config.sections():
+            module_name = config.get(name, "module")
+            module_content = connection.get_file("%s/%s" % (self.name, module_name))
             # save new exec
             app_exec_model, created = Exec.objects.get_or_create(base=self, name=name)
             app_exec_model.module = module_content
             app_exec_model.save()
             
         # delete old exec
-        print app_config_json
         for local_exec in Exec.objects.filter(base=self).values('name'):
-            if local_exec['name'] in app_config_json:
+            if local_exec['name'] in config.sections():
                 print "exists"
             else:
                 Exec.objects.get(base=self, name=local_exec['name']).delete()
