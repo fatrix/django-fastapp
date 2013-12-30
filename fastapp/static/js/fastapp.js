@@ -33,6 +33,16 @@ channel.bind('pusher:subscription_succeeded', function() {
 });
 
 $(function() {
+    // edit
+    $("button#edit_html").click(function(event) {
+       event.preventDefault(); 
+       console.log("edit");
+       console.log($("p#edit_html"));
+       console.log($("p#edit_html").find("div.CodeMirror"));
+       $("p#edit_html").find("div.CodeMirror").toggle();
+    });
+    
+
     // exec
     $("a.exec").click(function(event) {
        event.preventDefault(); 
@@ -41,7 +51,6 @@ $(function() {
        $.get(url, function(data) {
          //alert(data);
        });
-
     });
 
     // forms
