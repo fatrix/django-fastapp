@@ -39,3 +39,5 @@ nosetests.xml
 **/.idea/*
 **.DS_Store
 .codeintel/
+fastapp.sublime-workspace
+fastapp.sublime-project
