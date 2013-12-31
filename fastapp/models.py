@@ -1,4 +1,3 @@
-import json
 import urllib
 from django.db import models
 from django.contrib.auth.models import User
@@ -28,30 +27,38 @@ class Base(models.Model):
     def shared(self):
         return "/fastapp/%s/index/?shared_key=%s" % (self.name, urllib.quote(self.uuid))
 
-    def refresh(self):
+    def refresh(self, put=False):
         connection = Connection(self.user.authprofile.access_token)
         template_name = "%s/index.html" % self.name
-        template_content = connection.get_file(template_name)
-        self.content = template_content
+        if put:
+            template_content = connection.put_file(template_name, self.content)
+        else:
+            template_content = connection.get_file(template_name)
+            self.content = template_content
 
+    def refresh_execs(self, exec_name, put=False):
         # execs
+        connection = Connection(self.user.authprofile.access_token)
         app_config = "%s/app.config" % self.name
         config = ConfigParser.RawConfigParser()
         config.readfp(io.BytesIO(connection.get_file(app_config)))
-        for name in config.sections():
-            module_name = config.get(name, "module")
-            module_content = connection.get_file("%s/%s" % (self.name, module_name))
-            # save new exec
-            app_exec_model, created = Exec.objects.get_or_create(base=self, name=name)
-            app_exec_model.module = module_content
-            app_exec_model.save()
-            
-        # delete old exec
-        for local_exec in Exec.objects.filter(base=self).values('name'):
-            if local_exec['name'] in config.sections():
-                print "exists"
-            else:
-                Exec.objects.get(base=self, name=local_exec['name']).delete()
+        if put:
+            module_content = connection.put_file("%s/%s.py" % (self.name, exec_name), self.execs.get(name=exec_name).module)
+        else:
+            for name in config.sections():
+                module_name = config.get(name, "module")
+                module_content = connection.get_file("%s/%s" % (self.name, module_name))
+                # save new exec
+                app_exec_model, created = Exec.objects.get_or_create(base=self, name=name)
+                app_exec_model.module = module_content
+                app_exec_model.save()
+                
+            # delete old exec
+            for local_exec in Exec.objects.filter(base=self).values('name'):
+                if local_exec['name'] in config.sections():
+                    print "exists"
+                else:
+                    Exec.objects.get(base=self, name=local_exec['name']).delete()
 
 
     def template(self, context):

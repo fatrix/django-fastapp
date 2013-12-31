@@ -1,5 +1,6 @@
 import datetime
 import logging
+import StringIO
 from django.contrib import messages
 import dropbox
 from dropbox.rest import ErrorResponse
@@ -39,6 +40,10 @@ class Connection(object):
 
     def get_file(self, path):
         return self._call('get_file', path).read()
+
+    def put_file(self, path, content):
+        f = StringIO.StringIO(content)
+        return self._call('put_file', path, f, True)
 
     def _call(self, ms, *args):
         try:

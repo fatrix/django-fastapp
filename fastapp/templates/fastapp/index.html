@@ -12,7 +12,7 @@
     <link href="{{ STATIC_URL }}bare/css/bootstrap.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
 
-    <! -- js -->
+    <!-- js -->
     <script src="{{ STATIC_URL }}js/ndatetime-1.4.0.min.js"></script>
 
     <!-- Pusher -->
@@ -22,7 +22,11 @@
     <link href="{{ STATIC_URL }}css/fastapp.css" rel="stylesheet">
     
     <!-- js for fastapp -->
-    <script type="text/javascript"> window.username = "{{ user.username }}"; </script>
+    <script type="text/javascript"> 
+    window.username = "{{ user.username }}"; 
+    window.pusher_key = "{{ PUSHER_KEY }}";
+    window.shared_key_link = "{{ active_base.shared }}"
+    </script>
     <script src="{{ STATIC_URL }}js/fastapp.js"></script>
 
     <!-- CodeMirror -->
@@ -64,84 +68,98 @@
                         <ul class="dropdown-menu">
                             {% for base in bases %}
                             <li><a class="{% ifequal active_base base %}active{%endifequal%}"
-                               href="/fastapp/{{ base.name }}/index/">{{ base.name }}</a></li>
-                               {% endfor %}
-                           </ul>
-                       </li>
-                   </ul>
-                   {% endif %}
-                   {% if not user.is_authenticated %}
-                   <ul class="nav navbar-nav navbar-right">
+                             href="/fastapp/{{ base.name }}/index/">{{ base.name }}</a></li>
+                             {% endfor %}
+                         </ul>
+                     </li>
+                 </ul>
+                 {% endif %}
+                 {% if not user.is_authenticated %}
+                 <ul class="nav navbar-nav navbar-right">
                     <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Shared Bases<b class="caret"></b></a>
                         <ul class="dropdown-menu">
                             {% for name, shared_key in shared_bases.items %}
                             <li><a class="{% ifequal active_base base %}active{%endifequal%}"
-                               href="/fastapp/{{ name }}/index/?shared_key={{ shared_key }}">{{ name }}</a></li>
-                               {% endfor %}
-                           </ul>
-                       </li>
-                   </ul>
-                   {% endif %}
-               </div>
-           </div>
-       </nav>
+                             href="/fastapp/{{ name }}/index/?shared_key={{ shared_key }}">{{ name }}</a></li>
+                             {% endfor %}
+                         </ul>
+                     </li>
+                 </ul>
+                 {% endif %}
+             </div>
+         </div>
+     </nav>
 
-   </div>
 
-   <!-- /.container -->
+     <!-- /.container -->
 
-   <div class="container">
+     <div class="container">
 
-    <div class="row">
-        <div class="col-lg-12">
-            {% if FASTAPP_NAME %}
-            <h1>{{ FASTAPP_NAME }} <a href="{{ active_base.shared }}">
-                {# Logic for authenticated user (owner) #}
-                <script>
+        <div class="span4">
+            <h3>Client</h3>
+        </div>
+        <div class="span4">
+            <h3>Server</h3>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <div class="row">
+            <div class="col-lg-12">
+                {% if FASTAPP_NAME %}
+                <h1>{{ FASTAPP_NAME }} 
+                    {# Logic for authenticated user (owner) #}
+                    <script>
                 //window.readOnly = {{ user.is_authenticated }};
                 </script>
+
                 {% if user.is_authenticated %}
-
-                <button id="edit_html" type="button" class="btn btn-default btn-xs">
-                    <span class="glyphicon glyphicon-edit"></span> Edit</button>
-                <button type="button" class="btn btn-default btn-xs">
+                <button id="share" type="button" class="btn btn-default btn-xs">
                     <span class="glyphicon glyphicon-share"></span> Share</button>
-                {% endif %}
-            </a></h1>
+                    {% endif %}
+                </h1>
+                <h2>index
+                    <button id="edit_html" type="button" class="btn btn-default btn-xs">
+                        <span class="glyphicon glyphicon-edit"></span> Edit</button>
+                    </h2>
+                    <p>
+                        <form id="edit_html"><textarea id="area_html" name="html">{{ active_base.content }}</textarea></form>
+                    </p>
+                </p>
 
-            <p id="edit_html">
-                <form><textarea id="html" name="html">{{ active_base.content }}</form>
-            </p>
-            <script>
-    alert("And here is some normal JS code"); // also colored
-</script> </textarea></form>
-</p>
-
-
-{% for exec in FASTAPP_EXECS %}
-<li>
-    <a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">{{ exec.name}}</a>
-    <p>
-        <form><textarea id="code" name="code">{{ exec.module }}</textarea></form>
-    </p>
-
-
-    <script>
-                /*html 
-                */
-                var editor = CodeMirror.fromTextArea(document.getElementById("html"), {
+                <script>
+                /* html */
+                var editor = CodeMirror.fromTextArea(document.getElementById("area_html"), {
                     lineNumbers: true,
                     mode: "application/x-ejs",
                     indentUnit: 4,
                     indentWithTabs: true,
                     enterMode: "keep",
                     vimMode: true,
-                    tabMode: "shift"
+                    tabMode: "shift",
                 });
+                editor.on("blur", function(cm, cmChangeObject){
+                    $.post("/fastapp/{{ active_base.name }}/sync/", {
+                        content: cm.getValue()
+                    })
+                });
+                </script>
 
+
+                {% for exec in FASTAPP_EXECS %}
+                <h2>{{ exec.name}}</h2>
+                <p><a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json</a></p>
+                <p>
+                    <form>
+                        <textarea id="exec_code_for_{{ exec.name }}" name="exec_code_for_{{ exec.name }}">{{ exec.module }}</textarea>
+                    </form>
+                </p>
+
+                <script>
                 /* code */
-                CodeMirror.fromTextArea(document.getElementById("code"), {
+                editor = CodeMirror.fromTextArea(document.getElementById("exec_code_for_{{ exec.name }}"), {
                     mode: {name: "text/x-cython",
                     version: 2,
                     singleLineStringErrors: false},
@@ -149,9 +167,16 @@
                     lineNumbers: true,
                     indentUnit: 4,
                     tabMode: "shift",
+                    indentWithTabs: true,
                     matchBrackets: true,
                     vimMode: true,
                     showCursorWhenSelecting: true
+                });
+                editor.on("blur", function(cm, cmChangeObject){
+                    $.post("/fastapp/{{ active_base.name }}/sync/", {
+                        content: cm.getValue(),
+                        exec_name: "{{ exec.name }}"
+                    })
                 });
                 </script>
 

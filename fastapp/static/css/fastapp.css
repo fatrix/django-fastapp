@@ -25,3 +25,6 @@ body {
 li a.active {
 	background-color: darkgrey;
 }
+.CodeMirror {
+	height: inherit !important;
+}

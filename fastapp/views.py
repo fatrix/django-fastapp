@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404
 from django.template import RequestContext
 from django.template.loader import render_to_string
 from django.views.generic import View
+from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponseNotFound, HttpResponse, HttpResponseRedirect, HttpResponseBadRequest, HttpResponseForbidden
 from django.views.generic.base import ContextMixin
 from django.conf import settings
@@ -146,11 +147,43 @@ class DjendSharedView(View, ContextMixin):
         context['active_base'] = base_model
         context['FASTAPP_NAME'] = base_model.name
         context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
+        context['PUSHER_KEY'] = settings.PUSHER_KEY
         context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base_model.name)
 
         rs = base_model.template(context)
         return HttpResponse(rs)
 
+class DjendBaseSaveView(View):
+
+    def post(self, request, *args, **kwargs):
+        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
+        content = request.POST.get('content', None)
+
+        # syncing to storage provider
+        # exec
+        if request.POST.has_key('exec_name'):
+            exec_name = request.POST.get('exec_name')
+            # save in database
+            e = base.execs.get(name=exec_name)
+            e.module = content
+            e.save()
+            info(request.user.username, "Saved")
+            base.refresh_execs(exec_name, put=True)
+            info(request.user.username, "Synced '%s' to Dropbox" % exec_name)
+        # base
+        else:
+            base.content = content
+            base.save()
+            # save in database
+            info(request.user.username, "Saved")
+            base.refresh(put=True)
+            info(request.user.username, "Synced '%s' to Dropbox" % base.name)
+
+        return HttpResponse()
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendBaseSaveView, self).dispatch(*args, **kwargs)
 
 class DjendBaseView(View, ContextMixin):
 
@@ -167,6 +200,7 @@ class DjendBaseView(View, ContextMixin):
                 logging.debug("refresh base '%s'" % base)
                 try:
                     base.refresh()
+                    base.refresh_execs()
                     base.save()
                 except Exception, e:
                     print traceback.format_exc()
@@ -222,9 +256,7 @@ class DjendBaseView(View, ContextMixin):
                 if base is not None:
                     context['FASTAPP_NAME'] = base
                     context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
-                    #import pprint
-                    #pprint.pprint(settings.pusher_key)
-                    #context['pusher_key'] = settings.pusher_key
+                    context['PUSHER_KEY'] = settings.PUSHER_KEY
                     context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base)
                     context['active_base'] = base_model
                     context['LAST_EXEC'] = request.GET.get('done')
