@@ -1,7 +1,7 @@
 from distutils.core import setup
 
 setup(name='fastapp',
-      version='0.31',
+      version='0.32',
       py_modules=['fastapp'],
       install_requires=['dropbox==1.6', 
       					'requests==2.0.1', 
