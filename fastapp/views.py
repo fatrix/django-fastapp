@@ -18,6 +18,7 @@ from django.conf import settings
 import dropbox
 from dropbox.rest import ErrorResponse
 from fastapp.utils import message
+from fastapp import __version__ as version
 
 from utils import UnAuthorized, Connection, NoBasesFound
 from fastapp.models import AuthProfile, Base
@@ -141,6 +142,7 @@ class DjendSharedView(View, ContextMixin):
         request.session.modified = True
 
         # context
+        context['VERSION'] = version
         context['shared_bases'] = request.session['shared_bases']
         context['FASTAPP_EXECS'] = base_model.execs.all().order_by('name')
         context['LAST_EXEC'] = request.GET.get('done')
@@ -254,6 +256,7 @@ class DjendBaseView(View, ContextMixin):
             try:
                 context['bases'] = Base.objects.filter(user=request.user.id).order_by('name')
                 if base is not None:
+                    context['VERSION'] = version
                     context['FASTAPP_NAME'] = base
                     context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
                     context['PUSHER_KEY'] = settings.PUSHER_KEY
@@ -262,6 +265,7 @@ class DjendBaseView(View, ContextMixin):
                     context['LAST_EXEC'] = request.GET.get('done')
                     rs = base_model.template(context)
                 else:
+                    context['VERSION'] = version
                     template_name = "fastapp/index.html"
                     rs = render_to_string(template_name, context_instance=context)
 

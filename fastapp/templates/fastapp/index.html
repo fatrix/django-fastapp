@@ -6,8 +6,14 @@
     <meta name="description" content="">
     <meta name="author" content="">
 
-    <title>Fastapp {% if FASTAPP_NAME %}: {{ FASTAPP_NAME }} {% endif %}</title>
+    {% block extra_header_pre %}
+    {% endblock %}
 
+    {% block fastapp_title %}
+    <title>Fastapp {% if FASTAPP_NAME %}: {{ FASTAPP_NAME }} {% endif %}</title>
+    {% endblock fastapp_title %}
+
+    {% block fastapp_header %}
     <!-- Bootstrap core CSS -->
     <link href="{{ STATIC_URL }}bare/css/bootstrap.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
@@ -20,6 +26,9 @@
 
     <!-- css for fastapp -->
     <link href="{{ STATIC_URL }}css/fastapp.css" rel="stylesheet">
+    {% if "full" not in request.GET %}
+    <link href="{{ STATIC_URL }}css/fastapp-nav.css" rel="stylesheet">
+    {% endif %}
     
     <!-- js for fastapp -->
     <script type="text/javascript"> 
@@ -39,6 +48,7 @@
     <script src="{{ STATIC_URL}}/codemirror/js/htmlmixed.js"></script>
     <script src="{{ STATIC_URL}}/codemirror/js/htmlembedded.js"></script>
     <script src="{{ STATIC_URL}}/codemirror/js/vim.js"></script>
+    {% endblock fastapp_header %}
 
     {% block extra_header %}
     {% endblock %}
@@ -47,7 +57,9 @@
 
 <body>
 
+    {% block fastapp_nav %}
     <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+        <a href="https://github.com/fatrix/django-fastapp"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_red_aa0000.png" alt="Fork me on GitHub"></a>
         <div class="container">
             <div class="navbar-header">
                 <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
@@ -57,11 +69,12 @@
                     <span class="icon-bar"></span>
                 </button>
                 <a class="navbar-brand" href="/fastapp/">Fastapp</a>
+                <a class="navbar-brand"><small>version {{ VERSION }}</small></a>
             </div>
 
             <div class="collapse navbar-collapse navbar-ex1-collapse">
                 {% if user.is_authenticated %}
-                <ul class="nav navbar-nav navbar-right">
+                <ul class="nav navbar-nav navbar-right pull-left">
                     <li><a href=".?refresh">Refresh</a></li>
                     <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">My Bases<b class="caret"></b></a>
@@ -90,10 +103,11 @@
              </div>
          </div>
      </nav>
+     {% endblock %}
 
 
+     {% block fastapp_main %}
      <!-- /.container -->
-
      <div class="container">
 
         <div class="span4">
@@ -149,7 +163,7 @@
 
 
                 {% for exec in FASTAPP_EXECS %}
-                <h2>{{ exec.name}}</h2>
+                <h2>{{ exec.name }}</h2>
                 <p><a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json</a></p>
                 <p>
                     <form>
@@ -193,8 +207,9 @@
             {% endfor %}
             <div id="messages">
             </div>
-            {% block content %}
-            {% endblock %}
+    {% endblock fastapp_main %}
+    {% block content %}
+    {% endblock %}
 
         </div>
     </div>

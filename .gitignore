@@ -41,3 +41,4 @@ nosetests.xml
 .codeintel/
 fastapp.sublime-workspace
 fastapp.sublime-project
+MANIFEST
