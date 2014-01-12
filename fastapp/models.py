@@ -36,7 +36,7 @@ class Base(models.Model):
             template_content = connection.get_file(template_name)
             self.content = template_content
 
-    def refresh_execs(self, exec_name, put=False):
+    def refresh_execs(self, put=False):
         # execs
         connection = Connection(self.user.authprofile.access_token)
         app_config = "%s/app.config" % self.name
