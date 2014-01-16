@@ -170,7 +170,7 @@ class DjendBaseSaveView(View):
             e.module = content
             e.save()
             info(request.user.username, "Saved")
-            base.refresh_execs(exec_name, put=True)
+            base.refresh_execs(put=True)
             info(request.user.username, "Synced '%s' to Dropbox" % exec_name)
         # base
         else:
@@ -244,6 +244,8 @@ class DjendBaseView(View, ContextMixin):
             if base:
                 base_model = get_object_or_404(Base, name=base, user=request.user.id)
                 base_model.save()
+                if refresh:
+                    base_model.refresh_execs()
 
                 # execs
                 try:
