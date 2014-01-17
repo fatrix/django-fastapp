@@ -48,6 +48,12 @@ $(function() {
        $("form#edit_html").find("div.CodeMirror").toggle();
     });
 
+    $("button[id^=edit_exec").click(function(event) {
+       id = event.currentTarget.id;
+       $("form#"+id).find("div.CodeMirror").toggle();
+       event.preventDefault();
+
+    });
     // shared
     $("button#share").click(function(event) {
       event.preventDefault();
@@ -76,7 +82,9 @@ $(function() {
                 //if (data.redirect) {
                 //  send_me("redirecting browser to: "+data.redirect, redirect, data.redirect)
                 //}
-                redirect(data.redirect);
+                if (data.redirect) {
+                  redirect(data.redirect);
+                }
 
             });
 

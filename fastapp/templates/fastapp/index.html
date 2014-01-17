@@ -164,10 +164,13 @@
 
 
                 {% for exec in FASTAPP_EXECS %}
-                <h2>{{ exec.name }}</h2>
+                <h2>{{ exec.name }}
+                    <button id="edit_exec_{{ exec.name }}" type="button" class="btn btn-default btn-xs">
+                        <span class="glyphicon glyphicon-edit"></span> Edit</button>
+                </h2>
                 <p><a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json</a></p>
                 <p>
-                    <form>
+                    <form id="edit_exec_{{ exec.name}}" class="code">
                         <textarea id="exec_code_for_{{ exec.name }}" name="exec_code_for_{{ exec.name }}">{{ exec.module }}</textarea>
                     </form>
                 </p>
