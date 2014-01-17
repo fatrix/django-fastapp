@@ -74,7 +74,10 @@ class DjendExecView(View, DjendMixin):
             query_string = copy.copy(request.GET)
         else:
             query_string = copy.copy(request.POST)
-        query_string.pop('json')
+        try:
+            query_string.pop('json')
+        except KeyError:
+            pass
 
         debug(username, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
 
@@ -116,8 +119,9 @@ class DjendExecView(View, DjendMixin):
             if isinstance(data['returned'], HttpResponseRedirect):
                 #return data
                 location = data['returned']['Location']
-                user_message(logging.INFO, request.user.username, "Redirect to: %s" % location)
-                return HttpResponse(json.dumps(data['returned']['Location']), content_type="application/json")
+                user_message(logging.INFO, request.user.username, "(%s) Redirect to: %s" % (exec_id, location))
+                print location
+                return HttpResponse(json.dumps({'redirect': data['returned']['Location']}), content_type="application/json")
             else:
                 return HttpResponse(json.dumps(data), content_type="application/json")
 
@@ -154,6 +158,17 @@ class DjendSharedView(View, ContextMixin):
 
         rs = base_model.template(context)
         return HttpResponse(rs)
+
+#class DjendMessageView(View):
+#
+#    def post(self, request, *args, **kwargs):
+#        print request.POST
+#        info(request.user.username, request.POST)
+#        return HttpResponse()
+#
+#    @csrf_exempt
+#    def dispatch(self, *args, **kwargs):
+#        return super(DjendMessageView, self).dispatch(*args, **kwargs)
 
 class DjendBaseSaveView(View):
 
