@@ -26,3 +26,6 @@ li a.active {
 .CodeMirror {
 	height: inherit !important;
 }
+div.container {
+	margin-bottom: 20px;
+}

@@ -74,7 +74,10 @@ class DjendExecView(View, DjendMixin):
             query_string = copy.copy(request.GET)
         else:
             query_string = copy.copy(request.POST)
-        query_string.pop('json')
+        try:
+            query_string.pop('json')
+        except KeyError:
+            pass
 
         debug(username, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
 
@@ -116,8 +119,9 @@ class DjendExecView(View, DjendMixin):
             if isinstance(data['returned'], HttpResponseRedirect):
                 #return data
                 location = data['returned']['Location']
-                user_message(logging.INFO, request.user.username, "Redirect to: %s" % location)
-                return HttpResponse(json.dumps(data['returned']['Location']), content_type="application/json")
+                user_message(logging.INFO, request.user.username, "(%s) Redirect to: %s" % (exec_id, location))
+                print location
+                return HttpResponse(json.dumps({'redirect': data['returned']['Location']}), content_type="application/json")
             else:
                 return HttpResponse(json.dumps(data), content_type="application/json")
 
@@ -155,6 +159,17 @@ class DjendSharedView(View, ContextMixin):
         rs = base_model.template(context)
         return HttpResponse(rs)
 
+#class DjendMessageView(View):
+#
+#    def post(self, request, *args, **kwargs):
+#        print request.POST
+#        info(request.user.username, request.POST)
+#        return HttpResponse()
+#
+#    @csrf_exempt
+#    def dispatch(self, *args, **kwargs):
+#        return super(DjendMessageView, self).dispatch(*args, **kwargs)
+
 class DjendBaseSaveView(View):
 
     def post(self, request, *args, **kwargs):
@@ -169,15 +184,18 @@ class DjendBaseSaveView(View):
             e = base.execs.get(name=exec_name)
             e.module = content
             e.save()
-            info(request.user.username, "Saved")
-            base.refresh_execs(exec_name, put=True)
-            info(request.user.username, "Synced '%s' to Dropbox" % exec_name)
+            try:
+                info(request.user.username, "Exec '%s' saved" % exec_name)
+                base.refresh_execs(exec_name=exec_name, put=True)
+                info(request.user.username, "Synced '%s' to Dropbox" % exec_name)
+            except Exception, e:
+                error(request.user.username, "Error syncing (%s)" % e)
         # base
         else:
             base.content = content
             base.save()
             # save in database
-            info(request.user.username, "Saved")
+            info(request.user.username, "Base index '%s' saved" % base.name)
             base.refresh(put=True)
             info(request.user.username, "Synced '%s' to Dropbox" % base.name)
 
@@ -244,6 +262,8 @@ class DjendBaseView(View, ContextMixin):
             if base:
                 base_model = get_object_or_404(Base, name=base, user=request.user.id)
                 base_model.save()
+                if refresh:
+                    base_model.refresh_execs()
 
                 # execs
                 try:

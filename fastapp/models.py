@@ -36,14 +36,17 @@ class Base(models.Model):
             template_content = connection.get_file(template_name)
             self.content = template_content
 
-    def refresh_execs(self, put=False):
+    def refresh_execs(self, exec_name=None, put=False):
         # execs
         connection = Connection(self.user.authprofile.access_token)
         app_config = "%s/app.config" % self.name
         config = ConfigParser.RawConfigParser()
         config.readfp(io.BytesIO(connection.get_file(app_config)))
         if put:
-            module_content = connection.put_file("%s/%s.py" % (self.name, exec_name), self.execs.get(name=exec_name).module)
+            if exec_name:
+                connection.put_file("%s/%s.py" % (self.name, exec_name), self.execs.get(name=exec_name).module)
+            else:
+                raise Exception("exec_name not specified")
         else:
             for name in config.sections():
                 module_name = config.get(name, "module")

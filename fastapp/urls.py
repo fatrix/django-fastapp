@@ -10,6 +10,7 @@ urlpatterns = patterns('',
 
     url(r'(?P<base>[\w-]+)/index/$', login_or_sharedkey(DjendBaseView.as_view())),
     url(r'(?P<base>[\w-]+)/sync/$', login_required(DjendBaseSaveView.as_view())),
+    #url(r'(?P<base>[\w-]+)/message/$', login_required(DjendMessageView.as_view())),
     url(r'(?P<base>[\w-]+)/exec/(?P<id>\w+)/$', \
                                             login_or_sharedkey(DjendExecView.as_view())),
     url(r'(?P<base>[\w-]+)/static/(?P<name>[\w.-_]+)/', \

@@ -30,6 +30,16 @@ function add_message(data) {
     $("div#messages p").slice(10).remove();
 }
 
+//function send_me(broadcast_message, cb, arg) {
+//    $.post("/fastapi/"+window.active_base+"/message/", {'message': broadcast_message}, function(data) {
+//        cb(arg);
+//      });
+//}
+
+function redirect(location) {
+    window.location = location;
+}
+
 
 $(function() {
     // edit
@@ -38,11 +48,16 @@ $(function() {
        $("form#edit_html").find("div.CodeMirror").toggle();
     });
 
+    $("button[id^=edit_exec").click(function(event) {
+       id = event.currentTarget.id;
+       $("form#"+id).find("div.CodeMirror").toggle();
+       event.preventDefault();
+
+    });
     // shared
     $("button#share").click(function(event) {
       event.preventDefault();
       add_client_message('Access the shared base: <a href="'+window.shared_key_link+'">'+ window.shared_key_link+'</a>');
-
     });
     
 
@@ -58,10 +73,22 @@ $(function() {
     $("form").submit(function(event) {
         console.warn(event.currentTarget.method);
         if (event.currentTarget.method == "post") {
-            $.post(event.currentTarget.action, $(this).serialize(), function(data){/*aaa*/});
+            $.post(event.currentTarget.action, $(this).serialize(), function(data){
+              console.log("send form with POST");
+              console.log(data);
+            });
         } else if (event.currentTarget.method == "get") {
-            $.get(event.currentTarget.action, $(this).serialize(), function(data){/*aaa*/});
-        } else {
+            $.get(event.currentTarget.action, $(this).serialize(), function(data){
+                //if (data.redirect) {
+                //  send_me("redirecting browser to: "+data.redirect, redirect, data.redirect)
+                //}
+                if (data.redirect) {
+                  redirect(data.redirect);
+                }
+
+            });
+
+                     } else {
             console.error("no method defined on form");
         }
         event.preventDefault();
@@ -69,3 +96,4 @@ $(function() {
 
     });
 });
+
