@@ -184,9 +184,12 @@ class DjendBaseSaveView(View):
             e = base.execs.get(name=exec_name)
             e.module = content
             e.save()
-            info(request.user.username, "Exec '%s' saved" % exec_name)
-            base.refresh_execs(exec_name=exec_name, put=True)
-            info(request.user.username, "Synced '%s' to Dropbox" % exec_name)
+            try:
+                info(request.user.username, "Exec '%s' saved" % exec_name)
+                base.refresh_execs(exec_name=exec_name, put=True)
+                info(request.user.username, "Synced '%s' to Dropbox" % exec_name)
+            except Exception, e:
+                error(request.user.username, "Error syncing (%s)" % e)
         # base
         else:
             base.content = content
