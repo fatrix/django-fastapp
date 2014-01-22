@@ -4,6 +4,7 @@ import json
 import datetime
 import copy
 import pusher
+import hashlib
 
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -68,8 +69,6 @@ class DjendExecView(View, DjendMixin):
         username = copy.copy(do_kwargs['request'].user.username)
 
         # debug incoming request
-        #from pprint import pprint
-        #pprint(request)
         if request.method == "GET":
             query_string = copy.copy(request.GET)
         else:
@@ -79,7 +78,8 @@ class DjendExecView(View, DjendMixin):
         except KeyError:
             pass
 
-        debug(username, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
+        user = channel_name_for_user(request)
+        debug(user, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
 
         try:
 
@@ -87,9 +87,13 @@ class DjendExecView(View, DjendMixin):
             func.username=username
             func.request=do_kwargs['request']
             func.session=do_kwargs['request'].session
-            func.info=info
+
+            # attach GET and POST data
             func.GET=copy.deepcopy(request.GET)
             func.POST=copy.deepcopy(request.POST)
+
+            # attach log functions
+            func.info=info
             func.debug=debug
             func.warn=warn
             func.error=error
@@ -112,14 +116,15 @@ class DjendExecView(View, DjendMixin):
         data.update({'id': kwargs['id']})
 
         if request.GET.has_key('json'):
+            user = channel_name_for_user(request)
             if data['status'] == "OK":
-                user_message(logging.INFO, request.user.username, str(data))
+                info(user, str(data))
             elif data['status'] == "NOK":
-                user_message(logging.ERROR, request.user.username, str(data))
+                error(user, str(data))
             if isinstance(data['returned'], HttpResponseRedirect):
                 #return data
                 location = data['returned']['Location']
-                user_message(logging.INFO, request.user.username, "(%s) Redirect to: %s" % (exec_id, location))
+                info(user, "(%s) Redirect to: %s" % (exec_id, location))
                 print location
                 return HttpResponse(json.dumps({'redirect': data['returned']['Location']}), content_type="application/json")
             else:
@@ -154,6 +159,7 @@ class DjendSharedView(View, ContextMixin):
         context['FASTAPP_NAME'] = base_model.name
         context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
         context['PUSHER_KEY'] = settings.PUSHER_KEY
+        context['CHANNEL'] = channel_name_for_user(request)
         context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base_model.name)
 
         rs = base_model.template(context)
@@ -280,6 +286,7 @@ class DjendBaseView(View, ContextMixin):
                     context['FASTAPP_NAME'] = base
                     context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
                     context['PUSHER_KEY'] = settings.PUSHER_KEY
+                    context['CHANNEL'] = channel_name_for_user(request)
                     context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base)
                     context['active_base'] = base_model
                     context['LAST_EXEC'] = request.GET.get('done')
@@ -368,7 +375,23 @@ def login_or_sharedkey(function):
         return HttpResponseRedirect("/admin/")
     return wrapper
 
+def sign(data):
+    m = hashlib.md5()
+    m.update(data)
+    m.update(settings.SECRET_KEY)
+    return "%s-%s" % (data, m.hexdigest()[:10])
+
+def channel_name_for_user(request):
+        if request.user.username:
+            channel_name = "%s-%s" % (request.user.username, sign(request.user.username))
+        else:
+            channel_name = "anon-%s" % sign(request.session.session_key)
+        return channel_name
+
+
 def user_message(level, username, message):
+
+    channel = username
 
     p = pusher.Pusher(
       app_id=settings.PUSHER_APP_ID,
@@ -385,7 +408,7 @@ def user_message(level, username, message):
     elif level == logging.ERROR:
         class_level = "error"        
 
-    p[username].trigger('console_msg', {'datetime': str(now), 'message': str(message), 'class': class_level})
+    p[channel].trigger('console_msg', {'datetime': str(now), 'message': str(message), 'class': class_level})
 
 def info(username, gmessage): 
         return user_message(logging.INFO, username, gmessage)
