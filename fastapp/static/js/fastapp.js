@@ -6,7 +6,7 @@
 
 // initialize Pusher listener
 var pusher = new Pusher(window.pusher_key);
-var channel = pusher.subscribe(window.username);
+var channel = pusher.subscribe(window.channel);
 channel.bind('console_msg', function(data) {
     data.source = "Server";
     add_message(data);
