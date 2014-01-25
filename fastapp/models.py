@@ -6,6 +6,7 @@ from django_extensions.db.fields import UUIDField
 from fastapp.utils import Connection
 import ConfigParser
 import io
+import StringIO
 
 
 class AuthProfile(models.Model):
@@ -27,14 +28,27 @@ class Base(models.Model):
     def shared(self):
         return "/fastapp/%s/index/?shared_key=%s" % (self.name, urllib.quote(self.uuid))
 
+    @property
+    def config(self):
+        config = ConfigParser.RawConfigParser()
+        for texec in self.execs.all():
+            config.add_section(texec.name)
+            config.set(texec.name, 'module', texec.name+".py")
+        config_string = StringIO.StringIO()
+        config.write(config_string)
+        return config_string.getvalue()
+
+
     def refresh(self, put=False):
         connection = Connection(self.user.authprofile.access_token)
         template_name = "%s/index.html" % self.name
-        if put:
-            template_content = connection.put_file(template_name, self.content)
-        else:
-            template_content = connection.get_file(template_name)
-            self.content = template_content
+        #if put:
+        #    template_content = connection.put_file(template_name, self.content)
+        #else:
+        #    template_content = connection.get_file(template_name)
+        #    self.content = template_content
+        template_content = connection.get_file(template_name)
+        self.content = template_content
 
     def refresh_execs(self, exec_name=None, put=False):
         # execs
@@ -45,6 +59,7 @@ class Base(models.Model):
         if put:
             if exec_name:
                 connection.put_file("%s/%s.py" % (self.name, exec_name), self.execs.get(name=exec_name).module)
+                connection.put_file(app_config, self.config)
             else:
                 raise Exception("exec_name not specified")
         else:
@@ -75,3 +90,26 @@ class Exec(models.Model):
     name = models.CharField(max_length=64)
     module = models.CharField(max_length=8192)
     base = models.ForeignKey(Base, related_name="execs", blank=True, null=True)
+
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+
+@receiver(post_save, sender=Exec)
+def synchronize_to_storage(sender, *args, **kwargs):
+    instance = kwargs['instance']
+    try:
+        connection = Connection(instance.base.user.authprofile.access_token)
+        connection.put_file("%s/%s.py" % (instance.base.name, instance.name), instance.module)
+        if kwargs.get('created'):
+            connection.put_file("%s/app.config" % (instance.base.name), instance.base.config)
+    except Exception, e:
+        print e
+
+@receiver(post_delete, sender=Exec)
+def synchronize_to_storage_on_delete(sender, *args, **kwargs):
+    print "DELETE"
+    instance = kwargs['instance']
+    connection = Connection(instance.base.user.authprofile.access_token)
+    print connection
+    connection.put_file("%s/app.config" % (instance.base.name), instance.base.config)
+    print connection.delete_file("%s/%s.py" % (instance.base.name, instance.name))
