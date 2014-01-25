@@ -5,6 +5,7 @@ import datetime
 import copy
 import pusher
 import hashlib
+import dropbox
 
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -22,7 +23,7 @@ from fastapp.utils import message
 from fastapp import __version__ as version
 
 from utils import UnAuthorized, Connection, NoBasesFound
-from fastapp.models import AuthProfile, Base
+from fastapp.models import AuthProfile, Base, Exec
 
 class DjendStaticView(View):
 
@@ -85,6 +86,7 @@ class DjendExecView(View, DjendMixin):
 
             exec sfunc
             func.username=username
+            func.channel=channel_name_for_user(request)
             func.request=do_kwargs['request']
             func.session=do_kwargs['request'].session
 
@@ -99,6 +101,7 @@ class DjendExecView(View, DjendMixin):
             func.error=error
 
             returned = func(func)
+            print returned
         except Exception, e:
             exception = "%s: %s" % (type(e).__name__, e.message)
             traceback.print_exc()
@@ -132,6 +135,13 @@ class DjendExecView(View, DjendMixin):
 
         return HttpResponseRedirect("/fastapp/%s/index/?done=%s" % (base, exec_id))
 
+    @csrf_exempt
+    def post(self, request, *args, **kwargs):
+            DjendExecView.get(self, request, args, kwargs)
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendExecView, self).dispatch(*args, **kwargs)
 
 class DjendSharedView(View, ContextMixin):
 
@@ -176,6 +186,65 @@ class DjendSharedView(View, ContextMixin):
 #    def dispatch(self, *args, **kwargs):
 #        return super(DjendMessageView, self).dispatch(*args, **kwargs)
 
+class DjendExecSaveView(View):
+
+    def post(self, request, *args, **kwargs):
+        #import pdb; pdb.set_trace()
+        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user))
+
+        # syncing to storage provider
+        # exec
+        if request.POST.has_key('exec_name'):
+            exec_name = request.POST.get('exec_name')
+            # save in database
+            #e = base.execs.get(name=exec_name)
+            try:
+                e, created = Exec.objects.get_or_create(name=exec_name, base=base)
+                if not created:
+                    warn(channel_name_for_user(request), "Exec '%s' does already exist" % exec_name)
+                    return HttpResponseBadRequest()
+                else:
+                    e.module = """def func(self):\n    pass
+                    """
+                    e.save()
+            except Exception, e:
+                error(channel_name_for_user(request), "Error saving Exec '%s'" % exec_name)
+                return HttpResponseBadRequest(e)
+        # base
+        else:
+            # save in database
+            info(request.user.username, "Base index '%s' saved" % base.name)
+            base.refresh(put=True)
+            info(request.user.username, "Synced '%s' to Dropbox" % base.name)
+
+        #return HttpResponseRedirect("/fastapp/demo/index/")
+        return HttpResponse('{"redirect": %s}' % request.META['HTTP_REFERER'])
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendExecSaveView, self).dispatch(*args, **kwargs)
+
+class DjendExecDeleteView(View):
+
+    def post(self, request, *args, **kwargs):
+        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
+
+        # syncing to storage provider
+        # exec
+        e = base.execs.get(name=kwargs['id'])
+        print e.delete()
+        try:
+            e.delete()
+            print "deleted"
+            info(request.user.username, "Exec '%s' deleted" % e.exec_name)
+        except Exception, e:
+            error(request.user.username, "Error deleting(%s)" % e)
+        return HttpResponse('{"redirect": %s}' % request.META['HTTP_REFERER'])
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendExecDeleteView, self).dispatch(*args, **kwargs)
+
 class DjendBaseSaveView(View):
 
     def post(self, request, *args, **kwargs):
@@ -190,12 +259,12 @@ class DjendBaseSaveView(View):
             e = base.execs.get(name=exec_name)
             e.module = content
             e.save()
-            try:
-                info(request.user.username, "Exec '%s' saved" % exec_name)
-                base.refresh_execs(exec_name=exec_name, put=True)
-                info(request.user.username, "Synced '%s' to Dropbox" % exec_name)
-            except Exception, e:
-                error(request.user.username, "Error syncing (%s)" % e)
+            #try:
+            #    info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
+            #    base.refresh_execs(exec_name=exec_name, put=True)
+            #    info(channel_name_for_user(request), "Synced '%s' to Dropbox" % exec_name)
+            #except Exception, e:
+            #    error(request.user.username, "Error syncing (%s)" % e)
         # base
         else:
             base.content = content
@@ -304,10 +373,8 @@ class DjendBaseView(View, ContextMixin):
 
         # error handling
         except (UnAuthorized, AuthProfile.DoesNotExist), e:
-            print traceback.format_exc()
             return HttpResponseRedirect("/fastapp/dropbox_auth_start")
         except NoBasesFound, e:
-            print traceback.format_exc()
             message(request, logging.WARNING, "No bases found")
         #except Exception, e:
         #    print traceback.format_exc()
@@ -417,4 +484,5 @@ def debug(username, gmessage):
 def error(username, gmessage): 
         return user_message(logging.ERROR, username, gmessage)
 def warn(username, gmessage): 
+        print "WARN"
         return user_message(logging.WARN, username, gmessage)

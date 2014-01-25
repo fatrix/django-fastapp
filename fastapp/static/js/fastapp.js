@@ -52,8 +52,38 @@ $(function() {
        id = event.currentTarget.id;
        $("form#"+id).find("div.CodeMirror").toggle();
        event.preventDefault();
+    });
+
+    $("button[id^=delete_exec").click(function(event) {
+      console.log($(event.currentTarget));
+      console.log($(event.currentTarget).attr('exec'));
+      exec_name = $(event.currentTarget).attr('exec');
+       event.preventDefault();
+          $.post("/fastapp/"+window.active_base+"/delete/"+exec_name+"/", function(xhr, textStatus){
+            location.reload();
+          });
 
     });
+
+    $("button[id=create_exec").click(function(event) {
+      parent = $(event.currentTarget).parent();
+      input = $('<div class="row"> <div class="col-lg-6"> <div class="input-group"> <input type="text" class="form-control"> <span class="input-group-btn"> <button class="btn btn-default" type="button"><span class="glyphicon glyphicon-save"></span> Save</button> </span> </div>');
+      parent.after(input);
+      input.find("button").click(function(event) {
+          input_value = input.find("input").val();
+          $.post("/fastapp/"+window.active_base+"/create_exec/", {'exec_name': input_value}, function(xhr, textStatus){
+            location.reload();
+          });
+      });
+      event.preventDefault();
+    });
+
+    function redirect(xhr,textStatus) {
+     if (xhr.status == 302) {
+      //location.href = xhr.getResponseHeader("Location");
+    }
+  }
+
     // shared
     $("button#share").click(function(event) {
       event.preventDefault();
@@ -61,7 +91,7 @@ $(function() {
     });
     
 
-    // exec
+    // call exec simple
     $("a.exec").click(function(event) {
        event.preventDefault();
        var url = $(this).attr('href');

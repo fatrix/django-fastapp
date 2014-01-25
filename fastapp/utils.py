@@ -45,6 +45,9 @@ class Connection(object):
         f = StringIO.StringIO(content)
         return self._call('put_file', path, f, True)
 
+    def delete_file(self, path):
+        return self._call('file_delete', path)
+
     def _call(self, ms, *args):
         try:
             m = getattr(self.client, ms)
