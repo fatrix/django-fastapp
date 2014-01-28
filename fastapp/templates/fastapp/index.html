@@ -77,19 +77,33 @@
                 {% if user.is_authenticated %}
                 <ul class="nav navbar-nav navbar-right pull-left">
                     <li><a href=".?refresh">Refresh</a></li>
+                    <div class="footer hide">test</div>
                     <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">My Bases<b class="caret"></b></a>
                         <ul class="dropdown-menu">
                             {% for base in bases %}
-                            <li><a class="{% ifequal active_base base %}active{%endifequal%}"
-                             href="/fastapp/{{ base.name }}/index/">{{ base.name }}</a></li>
-                             {% endfor %}
-                         </ul>
-                     </li>
-                 </ul>
-                 {% endif %}
-                 {% if not user.is_authenticated %}
-                 <ul class="nav navbar-nav navbar-right">
+                            <li>
+                                <a class="{% ifequal active_base base %}active{%endifequal%}"
+                                href="/fastapp/{{ base.name }}/index/">{{ base.name }}</a>
+                            </li>
+                            {% endfor %}
+                            <li>
+                                <form method="post"/>
+                                <div>
+                                    <div class="input-group">
+                                      <input type="text" class="form-control" name="new_base" placeholder="New base">
+                                      <span class="input-group-btn">
+                                      <button id="new_base" class="btn btn-default" type="button"><span class="glyphicon glyphicon-arrow-right"/></button>
+                                    </span>
+                                </div><!-- /input-group -->
+                            </div><!-- /.col-lg-6 -->
+                        </form>
+                    </li>                </ul>
+            </li>
+        </ul>
+                  {% endif %}
+                  {% if not user.is_authenticated %}
+                  <ul class="nav navbar-nav navbar-right">
                     <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Shared Bases<b class="caret"></b></a>
                         <ul class="dropdown-menu">
@@ -109,7 +123,8 @@
 
      {% block fastapp_main %}
      <!-- /.container -->
-     <div class="container">
+
+    <div class="container">
 
         <div class="span4">
             <h3>Client</h3>
@@ -131,9 +146,11 @@
                 </script>
 
                 {% if user.is_authenticated %}
-                    <button id="share" type="button" class="btn btn-default btn-xs">
+                <button id="share" type="button" class="btn btn-default btn-xs">
                     <span class="glyphicon glyphicon-share"></span> Share</button>
-                {% endif %}
+                <button id="delete" type="button" class="btn btn-default btn-xs">
+                    <span class="glyphicon glyphicon-remove"></span> Delete</button>
+                    {% endif %}
                 </h1>
                 <h2>index
                     <button id="edit_html" type="button" class="btn btn-default btn-xs">
@@ -166,37 +183,39 @@
                 <div>
                     <p>
                         <button id="create_exec" type="button" class="btn btn-default btn-xs">
-                        <span class="glyphicon glyphicon-plus"></span> New Exec</button>
-                    </p>
+                            <span class="glyphicon glyphicon-plus"></span> New Exec</button>
+                        </p>
 
+                    </div>
                 </div>
-                </div>
-                </div>
+            </div>
 
-                {% endif %}
+            {% endif %}
 
-                {% for exec in FASTAPP_EXECS %}
-                <h2>{{ exec.name }}
-                    <button id="edit_exec_{{ exec.name }}" type="button" class="btn btn-default btn-xs">
-                        <span class="glyphicon glyphicon-edit"></span> Edit</button>
+            {% for exec in FASTAPP_EXECS %}
+            <h2>{{ exec.name }}
+                <button id="edit_exec_{{ exec.name }}" type="button" class="btn btn-default btn-xs">
+                    <span class="glyphicon glyphicon-edit"></span> Edit</button>
                     {% if user.is_authenticated %}
                     <button id="delete_exec_{{ exec.name }}" exec="{{ exec.name }}" type="button" class="btn btn-default btn-xs">
-                        <span class="glyphicon glyphicon-edit"></span> Delete</button>
-                    {% endif %}
-                </h2>
-                <p><a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json</a></p>
-                <p>
-                    <form id="edit_exec_{{ exec.name}}" class="code">
-                        <textarea id="exec_code_for_{{ exec.name }}" name="exec_code_for_{{ exec.name }}">{{ exec.module }}</textarea>
-                    </form>
-                </p>
+                        <span class="glyphicon glyphicon-remove"></span> Delete</button>
+                        <button id="clone_exec_{{ exec.name }}" exec="{{ exec.name }}" type="button" class="btn btn-default btn-xs">
+                        <span class="glyphicon glyphicon-chevron-down"></span> Clone</button>
+                        {% endif %}
+                    </h2>
+                    <p><a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json</a></p>
+                    <p>
+                        <form id="edit_exec_{{ exec.name}}" class="code">
+                            <textarea id="exec_code_for_{{ exec.name }}" name="exec_code_for_{{ exec.name }}">{{ exec.module }}</textarea>
+                        </form>
+                    </p>
 
-                <script>
-                /* code */
-                editor = CodeMirror.fromTextArea(document.getElementById("exec_code_for_{{ exec.name }}"), {
-                    mode: {name: "text/x-cython",
-                    version: 2,
-                    singleLineStringErrors: false},
+                    <script>
+                    /* code */
+                    editor = CodeMirror.fromTextArea(document.getElementById("exec_code_for_{{ exec.name }}"), {
+                        mode: {name: "text/x-cython",
+                        version: 2,
+                        singleLineStringErrors: false},
                     //readOnly: "$window.readyOnly",
                     lineNumbers: true,
                     indentUnit: 4,
@@ -206,38 +225,38 @@
                     vimMode: true,
                     showCursorWhenSelecting: true
                 });
-                editor.on("blur", function(cm, cmChangeObject){
-                    $.post("/fastapp/{{ active_base.name }}/sync/", {
-                        content: cm.getValue(),
-                        exec_name: "{{ exec.name }}"
-                    })
-                });
-                </script>
+                    editor.on("blur", function(cm, cmChangeObject){
+                        $.post("/fastapp/{{ active_base.name }}/sync/", {
+                            content: cm.getValue(),
+                            exec_name: "{{ exec.name }}"
+                        })
+                    });
+                    </script>
 
-            </li>
-            {% endfor %}
-            {% endif %}
+                </li>
+                {% endfor %}
+                {% endif %}
 
-            {% if LAST_EXEC %}
-            <h3>{{ LAST_EXEC }}</h3>
-            {% endif %}
+                {% if LAST_EXEC %}
+                <h3>{{ LAST_EXEC }}</h3>
+                {% endif %}
 
-            {% for message in messages %}
-            <div class="alert {{ message.tags }}">{{ message|safe }}</div>
-            {% endfor %}
-            <div id="messages">
+                {% for message in messages %}
+                <div class="alert {{ message.tags }}">{{ message|safe }}</div>
+                {% endfor %}
+                <div id="messages">
+                </div>
+                {% endblock fastapp_main %}
+                {% block content %}
+                {% endblock %}
+
             </div>
-    {% endblock fastapp_main %}
-    {% block content %}
-    {% endblock %}
-
         </div>
     </div>
-</div>
-<!-- /.container -->
+    <!-- /.container -->
 
-<!-- JavaScript -->
-<script src="{{ STATIC_URL }}bare/js/bootstrap.js"></script>
+    <!-- JavaScript -->
+    <script src="{{ STATIC_URL }}bare/js/bootstrap.js"></script>
 
 
 </body>

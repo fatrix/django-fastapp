@@ -94,6 +94,24 @@ class Exec(models.Model):
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
+@receiver(post_save, sender=Base)
+def initialize_on_storage(sender, *args, **kwargs):
+    instance = kwargs['instance']
+    if not kwargs.get('created'): return
+    try:
+        connection = Connection(instance.user.authprofile.access_token)
+        connection.create_folder("%s" % instance.name)
+        connection.put_file("%s/app.config" % (instance.name), instance.config)
+        index_template = """
+        {% extends "fastapp/index.html" %}
+
+        {% block content %}
+        {% endblock %}
+        """
+        connection.put_file("%s/index.html" % (instance.name), index_template)
+    except Exception, e:
+        print e
+
 @receiver(post_save, sender=Exec)
 def synchronize_to_storage(sender, *args, **kwargs):
     instance = kwargs['instance']
@@ -105,11 +123,22 @@ def synchronize_to_storage(sender, *args, **kwargs):
     except Exception, e:
         print e
 
+@receiver(post_delete, sender=Base)
+def base_to_storage_on_delete(sender, *args, **kwargs):
+    instance = kwargs['instance']
+    connection = Connection(instance.user.authprofile.access_token)
+    try:
+        connection.delete_file("%s" % instance.name)
+    except Exception, e:
+        print e
+
 @receiver(post_delete, sender=Exec)
 def synchronize_to_storage_on_delete(sender, *args, **kwargs):
-    print "DELETE"
     instance = kwargs['instance']
-    connection = Connection(instance.base.user.authprofile.access_token)
-    print connection
-    connection.put_file("%s/app.config" % (instance.base.name), instance.base.config)
-    print connection.delete_file("%s/%s.py" % (instance.base.name, instance.name))
+    try:
+        connection = Connection(instance.base.user.authprofile.access_token)
+        connection.put_file("%s/app.config" % (instance.base.name), instance.base.config)
+        connection.delete_file("%s/%s.py" % (instance.base.name, instance.name))
+    except Base.DoesNotExist, e:
+        # if post_delete is triggered from base.delete()
+        pass

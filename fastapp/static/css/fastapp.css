@@ -29,3 +29,6 @@ li a.active {
 div.container {
 	margin-bottom: 20px;
 }
+li.dropdown>ul>li>form {
+	margin: 20px;
+}

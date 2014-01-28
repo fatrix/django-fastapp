@@ -48,6 +48,9 @@ class Connection(object):
     def delete_file(self, path):
         return self._call('file_delete', path)
 
+    def create_folder(self, path):
+        return self._call('file_create_folder', path)
+
     def _call(self, ms, *args):
         try:
             m = getattr(self.client, ms)

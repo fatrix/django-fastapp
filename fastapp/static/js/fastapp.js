@@ -65,6 +65,18 @@ $(function() {
 
     });
 
+    $("button[id^=clone_exec").click(function(event) {
+      exec_name = $(event.currentTarget).attr('exec');
+       event.preventDefault();
+       console.log(event.currentTarget);
+       $.post("/fastapp/"+window.active_base+"/clone/"+exec_name+"/", function(data) {
+          if (data.redirect) {redirect(data.redirect); }
+       });
+          //$.post("/fastapp/"+window.active_base+"/delete/"+exec_name+"/", function(xhr, textStatus){
+          //  location.reload();
+          //});
+    });
+
     $("button[id=create_exec").click(function(event) {
       parent = $(event.currentTarget).parent();
       input = $('<div class="row"> <div class="col-lg-6"> <div class="input-group"> <input type="text" class="form-control"> <span class="input-group-btn"> <button class="btn btn-default" type="button"><span class="glyphicon glyphicon-save"></span> Save</button> </span> </div>');
@@ -78,18 +90,24 @@ $(function() {
       event.preventDefault();
     });
 
-    function redirect(xhr,textStatus) {
-     if (xhr.status == 302) {
-      //location.href = xhr.getResponseHeader("Location");
-    }
-  }
+    //function redirect(xhr,textStatus) {
+    // if (xhr.status == 302) {
+    //  //location.href = xhr.getResponseHeader("Location");
+    //}
+  //}
 
     // shared
     $("button#share").click(function(event) {
       event.preventDefault();
       add_client_message('Access the shared base: <a href="'+window.shared_key_link+'">'+ window.shared_key_link+'</a>');
     });
-    
+    // delete base
+    $("button#delete").click(function(event) {
+      event.preventDefault();
+      $.post("/fastapp/"+window.active_base+"/delete/", function(data) {
+        if (data.redirect) {redirect(data.redirect); }
+        });
+    });
 
     // call exec simple
     $("a.exec").click(function(event) {
@@ -97,6 +115,16 @@ $(function() {
        var url = $(this).attr('href');
        $.get(url, function(data) {
        });
+    });
+
+    // new base
+    $("button#new_base").click(function(event) {
+      new_base = $(event.currentTarget).parent().siblings("input").val();
+      $.post("/fastapp/base/new/", {'new_base_name': new_base}, function(data){
+        if (data.redirect) {
+          redirect(data.redirect);
+        }
+      });
     });
 
     // forms
@@ -126,4 +154,3 @@ $(function() {
 
     });
 });
-

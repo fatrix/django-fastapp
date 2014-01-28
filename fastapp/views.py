@@ -186,10 +186,11 @@ class DjendSharedView(View, ContextMixin):
 #    def dispatch(self, *args, **kwargs):
 #        return super(DjendMessageView, self).dispatch(*args, **kwargs)
 
+MODULE_DEFAULT_CONTENT = """def func(self):\n    pass"""
+
 class DjendExecSaveView(View):
 
     def post(self, request, *args, **kwargs):
-        #import pdb; pdb.set_trace()
         base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user))
 
         # syncing to storage provider
@@ -204,8 +205,7 @@ class DjendExecSaveView(View):
                     warn(channel_name_for_user(request), "Exec '%s' does already exist" % exec_name)
                     return HttpResponseBadRequest()
                 else:
-                    e.module = """def func(self):\n    pass
-                    """
+                    e.module = MODULE_DEFAULT_CONTENT
                     e.save()
             except Exception, e:
                 error(channel_name_for_user(request), "Error saving Exec '%s'" % exec_name)
@@ -222,7 +222,33 @@ class DjendExecSaveView(View):
 
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
-        return super(DjendExecSaveView, self).dispatch(*args, **kwargs)
+        return super(DjendExecSaveView, self).dispatch(*args, **kwargs) 
+
+class DjendBaseCreateView(View):
+
+    def post(self, request, *args, **kwargs):
+        base, created = Base.objects.get_or_create(name=request.POST.get('new_base_name'), user=User.objects.get(username=request.user.username))
+        if not created:
+            return HttpBadRequest()
+        base.save()
+        response_data = {"redirect": "/fastapp/%s/index/" % base.name}
+        return HttpResponse(json.dumps(response_data), content_type="application/json")
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendBaseCreateView, self).dispatch(*args, **kwargs)
+
+class DjendBaseDeleteView(View):
+
+    def post(self, request, *args, **kwargs):
+        base = Base.objects.get(name=kwargs['base'], user=User.objects.get(username=request.user.username))
+        base.delete()
+        response_data = {"redirect": "/fastapp/"}
+        return HttpResponse(json.dumps(response_data), content_type="application/json")
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendBaseDeleteView, self).dispatch(*args, **kwargs)
 
 class DjendExecDeleteView(View):
 
@@ -244,6 +270,27 @@ class DjendExecDeleteView(View):
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
         return super(DjendExecDeleteView, self).dispatch(*args, **kwargs)
+
+class DjendExecCloneView(View):
+
+    def post(self, request, *args, **kwargs):
+        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
+        clone_count = base.execs.filter(name__startswith="%s_clone" % kwargs['id']).count()
+        created = False
+        while not created:
+            cloned_exec, created = Exec.objects.get_or_create(base=base, name="%s_clone_%s" % (kwargs['id'], str(clone_count+1)))
+            clone_count+=1
+
+        cloned_exec.module = base.execs.get(name=kwargs['id']).module
+        cloned_exec.save()
+
+
+        response_data = {"redirect": request.META['HTTP_REFERER']}
+        return HttpResponse(json.dumps(response_data), content_type="application/json")
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendExecCloneView, self).dispatch(*args, **kwargs)
 
 class DjendBaseSaveView(View):
 
