@@ -111,8 +111,12 @@ class DjendExecView(View, DjendMixin):
     def get(self, request, *args, **kwargs):
         base = kwargs['base']
         exec_id = kwargs['id']
-        base_model = Base.objects.get(name=base)
-        exec_model = base_model.execs.get(name=exec_id)
+        base_model = get_object_or_404(Base, name=base)
+        try:
+            exec_model = base_model.execs.get(name=exec_id)
+        except Exec.DoesNotExist:
+            warn(channel_name_for_user(request), "404 on %s" % request.META['PATH_INFO'])
+            return HttpResponseNotFound("404 on %s" % request.META['PATH_INFO'])
 
         do_kwargs = {'request': request}
         data = self._do(exec_model.module, do_kwargs)
@@ -298,7 +302,6 @@ class DjendBaseSaveView(View):
         base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
         content = request.POST.get('content', None)
 
-        # syncing to storage provider
         # exec
         if request.POST.has_key('exec_name'):
             exec_name = request.POST.get('exec_name')
@@ -306,20 +309,16 @@ class DjendBaseSaveView(View):
             e = base.execs.get(name=exec_name)
             e.module = content
             e.save()
-            #try:
-            #    info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
-            #    base.refresh_execs(exec_name=exec_name, put=True)
-            #    info(channel_name_for_user(request), "Synced '%s' to Dropbox" % exec_name)
-            #except Exception, e:
-            #    error(request.user.username, "Error syncing (%s)" % e)
+            info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
+            print "SAVED"
         # base
         else:
             base.content = content
             base.save()
             # save in database
-            info(request.user.username, "Base index '%s' saved" % base.name)
-            base.refresh(put=True)
-            info(request.user.username, "Synced '%s' to Dropbox" % base.name)
+            print "SAVED"
+            info(channel_name_for_user(request), "Base index '%s' saved" % base.name)
+            #base.refresh(put=True)
 
         return HttpResponse()
 

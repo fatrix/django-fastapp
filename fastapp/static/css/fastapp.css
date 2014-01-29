@@ -2,11 +2,12 @@ div#messages {
 	background-color: black;
 	font-family: "Lucida Console", Monaco, monospace;
 	font-size: 0.8em;
-	padding: 10px;
 	margin: 10px;
+	width: 100%;
 }
 div#messages p {
 	line-height: 1em;	
+	margin: 0 0 1px !important;
 }
 div#messages p.debug {
 	color: grey;
@@ -26,9 +27,32 @@ li a.active {
 .CodeMirror {
 	height: inherit !important;
 }
-div.container {
+/*div.container {
 	margin-bottom: 20px;
-}
+}*/
 li.dropdown>ul>li>form {
 	margin: 20px;
+}
+.CodeMirror pre {
+	font-size: 0.8em !important;
+}
+.CodeMirror-linenumber {
+	font-size: 0.8em !important;
+}
+div.rendered {
+	background-color: #F7F2E0;
+	padding: 10px;
+}
+#wrap {
+  min-height: 100%;
+  height: auto;
+  /* Negative indent footer by its height */
+  margin: 0 auto 50px;
+  /* Pad bottom by footer height */
+  padding: 0 0 60px;
+}
+.footer {
+  height: 100px;
+  width: 100%;
+  background-color: #0B0719;
 }

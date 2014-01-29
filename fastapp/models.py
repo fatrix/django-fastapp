@@ -123,6 +123,15 @@ def synchronize_to_storage(sender, *args, **kwargs):
     except Exception, e:
         print e
 
+@receiver(post_save, sender=Base)
+def synchronize_base_to_storage(sender, *args, **kwargs):
+    instance = kwargs['instance']
+    try:
+        connection = Connection(instance.user.authprofile.access_token)
+        connection.put_file("%s/index.html" % instance.name, instance.content)
+    except Exception, e:
+        print e
+
 @receiver(post_delete, sender=Base)
 def base_to_storage_on_delete(sender, *args, **kwargs):
     instance = kwargs['instance']

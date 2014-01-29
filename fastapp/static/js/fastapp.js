@@ -27,7 +27,7 @@ function add_client_message(message) {
 
 function add_message(data) {
     $("div#messages").prepend("<p class='"+data.class+"'>"+data.datetime+" : "+data.source+" : "+data.message+"</p>");
-    $("div#messages p").slice(10).remove();
+    $("div#messages p").slice(5).remove();
 }
 
 //function send_me(broadcast_message, cb, arg) {
@@ -48,6 +48,7 @@ $(function() {
        $("form#edit_html").find("div.CodeMirror").toggle();
     });
 
+    $("form").find("div.CodeMirror").toggle();
     $("button[id^=edit_exec").click(function(event) {
        id = event.currentTarget.id;
        $("form#"+id).find("div.CodeMirror").toggle();
