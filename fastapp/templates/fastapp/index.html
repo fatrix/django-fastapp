@@ -5,24 +5,32 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="description" content="">
         <meta name="author" content="">
+
         {% block extra_header_pre %}
         {% endblock %}
+
         {% block fastapp_title %}
         <title>Fastapp {% if FASTAPP_NAME %}: {{ FASTAPP_NAME }} {% endif %}</title>
         {% endblock fastapp_title %}
+
         {% block fastapp_header %}
         <!-- Bootstrap core CSS -->
         <link href="{{ STATIC_URL }}bare/css/bootstrap.css" rel="stylesheet">
+        <!-- JQuery -->
         <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+
         <!-- js -->
         <script src="{{ STATIC_URL }}js/ndatetime-1.4.0.min.js"></script>
+
         <!-- Pusher -->
         <script src="https://d3dy5gmtp8yhk7.cloudfront.net/2.1/pusher.min.js" type="text/javascript"></script>
+
         <!-- css for fastapp -->
         <link href="{{ STATIC_URL }}css/fastapp.css" rel="stylesheet">
         {% if "full" not in request.GET %}
         <link href="{{ STATIC_URL }}css/fastapp-nav.css" rel="stylesheet">
         {% endif %}
+
         <!-- js for fastapp -->
         <script type="text/javascript"> 
             window.channel = "{{ CHANNEL }}"; 
@@ -31,20 +39,23 @@
             window.active_base = "{{ active_base.name }}"
         </script>
         <script src="{{ STATIC_URL }}js/fastapp.js"></script>
+
         <!-- CodeMirror -->
         <script src="{{ STATIC_URL }}codemirror/js/codemirror.js"></script>
         <link rel="stylesheet" href="{{ STATIC_URL }}codemirror/css/codemirror.css">
-        <script src="{{ STATIC_URL}}codemirror/js/javascript.js"></script>
-        <script src="{{ STATIC_URL}}codemirror/js/python.js"></script>
-        <script src="{{ STATIC_URL}}codemirror/js/xml.js"></script>
-        <script src="{{ STATIC_URL}}codemirror/js/css.js"></script>
-        <script src="{{ STATIC_URL}}codemirror/js/htmlmixed.js"></script>
-        <script src="{{ STATIC_URL}}codemirror/js/htmlembedded.js"></script>
-        <script src="{{ STATIC_URL}}codemirror/js/vim.js"></script>
+        <script src="{{ STATIC_URL }}codemirror/js/javascript.js"></script>
+        <script src="{{ STATIC_URL }}codemirror/js/python.js"></script>
+        <script src="{{ STATIC_URL }}codemirror/js/xml.js"></script>
+        <script src="{{ STATIC_URL }}codemirror/js/css.js"></script>
+        <script src="{{ STATIC_URL }}codemirror/js/htmlmixed.js"></script>
+        <script src="{{ STATIC_URL }}codemirror/js/htmlembedded.js"></script>
+        <script src="{{ STATIC_URL }}codemirror/js/vim.js"></script>
         {% endblock fastapp_header %}
+
         {% block extra_header %}
         {% endblock %}
     </head>
+
     <body>
         {% block fastapp_nav %}
         <div id="wrap">
@@ -64,7 +75,10 @@
                     <div class="collapse navbar-collapse navbar-ex1-collapse">
                         {% if user.is_authenticated %}
                         <ul class="nav navbar-nav navbar-right pull-left">
+                           {% if active_base %}
                             <li><a href=".?refresh">Refresh</a></li>
+                            {% endif %}
+                            {% if active_base %}
                             <li class="dropdown">
                                 <a href="#" class="dropdown-toggle" data-toggle="dropdown">My Bases<b class="caret"></b></a>
                                 <ul class="dropdown-menu">
@@ -90,6 +104,7 @@
                                     </li>
                                 </ul>
                             </li>
+                            {% endif %}
                         </ul>
                         {% endif %}
                         {% if not user.is_authenticated %}
@@ -109,6 +124,7 @@
                 </div>
             </nav>
             {% endblock %}
+
             {% block fastapp_main %}
             <!-- /.container -->
             <div class="container">

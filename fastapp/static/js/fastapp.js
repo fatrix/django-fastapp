@@ -27,7 +27,7 @@ function add_client_message(message) {
 
 function add_message(data) {
     $("div#messages").prepend("<p class='"+data.class+"'>"+data.datetime+" : "+data.source+" : "+data.message+"</p>");
-    $("div#messages p").slice(5).remove();
+    $("div#messages p").slice(7).remove();
 }
 
 //function send_me(broadcast_message, cb, arg) {

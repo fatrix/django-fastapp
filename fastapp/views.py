@@ -7,6 +7,8 @@ import pusher
 import hashlib
 import dropbox
 
+from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
@@ -215,11 +217,6 @@ class DjendExecSaveView(View):
                 error(channel_name_for_user(request), "Error saving Exec '%s'" % exec_name)
                 return HttpResponseBadRequest(e)
         # base
-        else:
-            # save in database
-            info(request.user.username, "Base index '%s' saved" % base.name)
-            base.refresh(put=True)
-            info(request.user.username, "Synced '%s' to Dropbox" % base.name)
 
         #return HttpResponseRedirect("/fastapp/demo/index/")
         return HttpResponse('{"redirect": %s}' % request.META['HTTP_REFERER'])
@@ -310,15 +307,12 @@ class DjendBaseSaveView(View):
             e.module = content
             e.save()
             info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
-            print "SAVED"
         # base
         else:
             base.content = content
             base.save()
             # save in database
-            print "SAVED"
             info(channel_name_for_user(request), "Base index '%s' saved" % base.name)
-            #base.refresh(put=True)
 
         return HttpResponse()
 
@@ -328,29 +322,29 @@ class DjendBaseSaveView(View):
 
 class DjendBaseView(View, ContextMixin):
 
-    def _refresh_bases(self, username):
-        connection = Connection(AuthProfile.objects.get(user__username=username).access_token)
-        bases = connection.listing()
-        for remote_base in bases:
-            remote_base, created = Base.objects.get_or_create(name=remote_base, user=User.objects.get(username=username))
-            remote_base.save()
-
-        refreshed_bases = []
-        for base in Base.objects.filter(user__username=username):
-            if base.name in bases:
-                logging.debug("refresh base '%s'" % base)
-                try:
-                    base.refresh()
-                    base.refresh_execs()
-                    base.save()
-                except Exception, e:
-                    print traceback.format_exc()
-
-                refreshed_bases.append(base)
-            else:
-                base.delete()
-
-        return refreshed_bases
+ #   def _refresh_bases(self, username):
+ #       connection = Connection(AuthProfile.objects.get(user__username=username).access_token)
+ #       bases = connection.listing()
+ #       for remote_base in bases:
+ #           remote_base, created = Base.objects.get_or_create(name=remote_base, user=User.objects.get(username=username))
+ #           remote_base.save()
+#
+#        refreshed_bases = []
+#        for base in Base.objects.filter(user__username=username):
+#            if base.name in bases:
+#                logging.debug("refresh base '%s'" % base)
+#                try:
+#                    base.refresh()
+#                    base.refresh_execs()
+#                    base.save()
+#                except Exception, e:
+#                    print traceback.format_exc()
+#
+#                refreshed_bases.append(base)
+#            else:
+#                base.delete()
+#
+#        return refreshed_bases
 
     def _refresh_single_base(self, base):
         base = Base.objects.get(name=base)
@@ -372,12 +366,11 @@ class DjendBaseView(View, ContextMixin):
 
             base = kwargs.get('base')
 
-            #if request.session.get('bases') is None or refresh:
             if refresh and base:
                 self._refresh_single_base(base)
-            elif refresh:
-                self._refresh_bases(request.user.username)
-                return HttpResponseRedirect("/fastapp/")
+            #elif refresh:
+            #    self._refresh_bases(request.user.username)
+            #    return HttpResponseRedirect("/fastapp/")
 
             base_model = None
             if base:
@@ -431,6 +424,20 @@ class DjendBaseView(View, ContextMixin):
 
         return HttpResponse(rs)
 
+from django.views.generic import TemplateView
+
+class DjendView(TemplateView):
+    template_name = "fastapp/default.html"
+
+    def get_context_data(self, **kwargs):
+        context = super(DjendView, self).get_context_data(**kwargs)
+        context['bases'] = Base.objects.filter(user=self.request.user).order_by('name')
+        context['VERSION'] = version
+        return context
+
+    @method_decorator(login_required)
+    def dispatch(self, *args, **kwargs):
+        return super(DjendView, self).dispatch(*args, **kwargs)
 
 def get_dropbox_auth_flow(web_app_session):
     redirect_uri = "%s/fastapp/dropbox_auth_finish" % settings.DROPBOX_REDIRECT_URL

@@ -3,7 +3,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.template import Template
 from django_extensions.db.fields import UUIDField
-from fastapp.utils import Connection
+from fastapp.utils import Connection, NotFound
 import ConfigParser
 import io
 import StringIO
@@ -65,7 +65,16 @@ class Base(models.Model):
         else:
             for name in config.sections():
                 module_name = config.get(name, "module")
-                module_content = connection.get_file("%s/%s" % (self.name, module_name))
+                try:
+                    module_content = connection.get_file("%s/%s" % (self.name, module_name))
+                except NotFound:
+                    print "DELETE %s" % module_name
+                    try:
+                        Exec.objects.get(name=module_name, base=self).delete()                    
+                    except Exec.DoesNotExist, e:
+                        self.save()
+                        print e
+
                 # save new exec
                 app_exec_model, created = Exec.objects.get_or_create(base=self, name=name)
                 app_exec_model.module = module_content
@@ -148,6 +157,8 @@ def synchronize_to_storage_on_delete(sender, *args, **kwargs):
         connection = Connection(instance.base.user.authprofile.access_token)
         connection.put_file("%s/app.config" % (instance.base.name), instance.base.config)
         connection.delete_file("%s/%s.py" % (instance.base.name, instance.name))
+    except NotFound, e:
+        print e
     except Base.DoesNotExist, e:
         # if post_delete is triggered from base.delete()
         pass
