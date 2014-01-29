@@ -1,0 +1,19 @@
+{% extends "fastapp/index.html" %}
+
+ {% block fastapp_main %}
+ <div class="container">
+ 	<div class="row">
+ 	<div><h1>My bases</h1></div>
+ 	</div>
+ 	{% for base in bases %}
+ 	<div class="highlight bases col-md-3">
+ 		<h4><a href="/fastapp/{{base.name}}/index/">{{ base.name }}</a></h4>
+ 		<p> {% for exec in base.execs.all %}
+ 			<button type="button" class="btn btn-default btn-xs"> {{ exec.name }} </button>
+ 			{% endfor %}
+ 		</p>
+ 	</div>
+
+ 	{% endfor %}
+ </div>
+ {% endblock %}
