@@ -71,3 +71,9 @@ div.bases {
 .highlight:hover {
 	background-color: #ececf1;
 }
+/* Grid */
+.gridStyle {
+    border: 1px solid rgb(212,212,212);
+    width: 100%; 
+    height: 200px;
+}

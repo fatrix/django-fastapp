@@ -40,6 +40,80 @@ function redirect(location) {
     window.location = location;
 }
 
+/*
+*/
+var app = angular.module('myApp', ['ngGrid', 'base64']);
+app.controller('MyCtrl', ['$scope', '$http', '$base64', function($scope, $http, $base64) {
+    $scope.myData = [{name: "Moroni", age: 50},
+                     {name: "Tiancum", age: 43},
+                     {name: "Jacob", age: 27},
+                     {name: "Nephi", age: 29},
+                     {name: "Enos", age: 34}];
+    /*$scope.myData = [ 
+                     {key: "API", value: 43}
+    ];*/
+    $scope.myData = [];
+    $scope.gridOptions = {
+        data: 'myData',
+        selectedItems: [],
+        enableCellSelection: true,
+        enableRowSelection: true,
+        enableCellEditOnFocus: true,
+        columnDefs: [{field: 'key', displayName: 'Key', enableCellEdit: true},
+                     {field: 'value', displayName:'Value', enableCellEdit: true}]
+    };
+
+    $scope.init = function() {
+      console.log("KV");
+      $.get("/fastapp/"+window.active_base+"/kv/", function(data){
+        console.log(data);
+        console.log(angular.toJson(data));
+        $scope.myData = angular.fromJson(data);
+        $scope.$apply();
+      });
+    };
+
+    $scope.addRow = function() {
+      $scope.myData.push({key: "New setting", value: ""});
+    };
+
+    $scope.save = function() {
+      // base64 output
+      $scope.myData.map(function(item) {
+        console.log(item.value);
+        console.log($base64.encode(item.value));
+      });
+
+      data_string = JSON.stringify($scope.myData);
+      $.post("/fastapp/"+window.active_base+"/kv/", {'settings': data_string}, function(xhr, textStatus){
+        console.log(textStatus);
+      });
+    };
+    $scope.delete = function(item) {
+      console.log(item);
+      console.log($scope.myData);
+      console.log($scope.myData.indexOf(item[0]));
+
+      // delete from scope
+      var index = $scope.myData.indexOf(item[0]);
+      $scope.myData.splice(index,1);
+      $scope.gridOptions.selectedItems.map(function(item) {
+        console.log(item.id);
+        if (item.id !== undefined) {
+          $http.delete("/fastapp/"+window.active_base+"/kv/"+item.id+"/", function(xhr, textStatus){
+            console.log(textStatus);
+          });
+        }
+      });
+
+      $scope.gridOptions.selectedItems = [];
+      // delete on server
+
+    };
+/*
+*/
+
+}]);
 
 $(function() {
     // edit
