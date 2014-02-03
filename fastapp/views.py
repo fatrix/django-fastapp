@@ -354,6 +354,20 @@ class DjendExecRenameView(View):
     def dispatch(self, *args, **kwargs):
         return super(DjendExecRenameView, self).dispatch(*args, **kwargs) 
 
+class DjendBaseRenameView(View):
+
+    def post(self, request, *args, **kwargs):
+        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
+        base.name = request.POST.get('new_name')
+        base.save()
+        response_data = {"redirect": request.META['HTTP_REFERER'].replace(kwargs['base'], base.name)}
+        print response_data
+        return HttpResponse(json.dumps(response_data), content_type="application/json")
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendBaseRenameView, self).dispatch(*args, **kwargs) 
+
 class DjendBaseSaveView(View):
 
     def post(self, request, *args, **kwargs):

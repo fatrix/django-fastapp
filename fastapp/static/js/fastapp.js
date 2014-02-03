@@ -159,7 +159,6 @@ $(function() {
             location.reload();
           });
       });
-
     });
 
     $("button[id^=rename_exec").click(function(event) {
@@ -171,6 +170,20 @@ $(function() {
           input_value = input.find("input").val();
           $.post("/fastapp/"+window.active_base+"/rename/"+exec_name+"/", {'new_name': input_value}, function(xhr, textStatus){
             location.reload();
+          });
+      });
+      event.preventDefault();
+    });
+
+    $("button[id^=rename_base").click(function(event) {
+      parent = $(event.currentTarget).parent();
+      base_name = window.active_base;
+      input = $('<div class="row"> <div class="col-lg-6"> <div class="input-group"> <input type="text" value="'+base_name+'" class="form-control"> <span class="input-group-btn"> <button class="btn btn-default" type="button"><span class="glyphicon glyphicon-save"></span> Save</button> </span> </div>');
+      parent.after(input);
+      input.find("button").click(function(event) {
+          input_value = input.find("input").val();
+          $.post("/fastapp/"+window.active_base+"/rename/", {'new_name': input_value}, function(data){
+          if (data.redirect) {redirect(data.redirect); }
           });
       });
       event.preventDefault();

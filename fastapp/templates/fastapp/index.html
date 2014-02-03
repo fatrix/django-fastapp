@@ -144,8 +144,13 @@
                         {% if user.is_authenticated %}
                         <button id="share" type="button" class="btn btn-default btn-xs">
                         <span class="glyphicon glyphicon-share"></span> Share</button>
+
                         <button id="delete" type="button" class="btn btn-default btn-xs">
                         <span class="glyphicon glyphicon-remove"></span> Delete</button>
+
+                        <button id="rename_base_{{ FASTAPP_NAME }}" type="button" class="btn btn-default btn-xs">
+                        <span class="glyphicon glyphicon-pencil"></span> Rename</button>
+
                         {% endif %}
                     </h1>
                 </div>
@@ -221,7 +226,7 @@
                                 <span class="glyphicon glyphicon-fire"></span> Execute</button>
 
                                 <button id="rename_exec_{{ exec.name }}" exec="{{ exec.name }}" type="button" class="btn btn-default btn-xs">
-                                <span class="glyphicon glyphicon-fire"></span> Rename</button>
+                                <span class="glyphicon glyphicon-pencil"></span> Rename</button>
 
                                 {% endif %}
                             </h2>

@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from fastapp.views import DjendBaseView, DjendBaseSaveView, DjendBaseDeleteView, DjendExecCloneView, DjendExecSaveView, \
                 DjendBaseCreateView, DjendExecDeleteView, DjendExecView, DjendStaticView, \
                 login_or_sharedkey, dropbox_auth_finish, dropbox_auth_start, DjendView, \
-                DjendBaseSettingsView, DjendExecRenameView
+                DjendBaseSettingsView, DjendExecRenameView, DjendBaseRenameView
 
 urlpatterns = patterns('',
 
@@ -16,6 +16,7 @@ urlpatterns = patterns('',
     url(r'(?P<base>[\w-]+)/sync/$', login_required(DjendBaseSaveView.as_view())),
     url(r'(?P<base>[\w-]+)/new/$', login_required(DjendBaseCreateView.as_view())),
     url(r'(?P<base>[\w-]+)/delete/$', login_required(DjendBaseDeleteView.as_view())),
+    url(r'(?P<base>[\w-]+)/rename/$', login_required(DjendBaseRenameView.as_view())),
 
     # settings
     url(r'(?P<base>[\w-]+)/kv/$', login_required(DjendBaseSettingsView.as_view())),

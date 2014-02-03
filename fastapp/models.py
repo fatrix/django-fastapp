@@ -9,6 +9,7 @@ from fastapp.utils import Connection, NotFound
 import ConfigParser
 import io
 import StringIO
+import gevent
 
 
 class AuthProfile(models.Model):
@@ -132,9 +133,9 @@ def synchronize_to_storage(sender, *args, **kwargs):
     instance = kwargs['instance']
     try:
         connection = Connection(instance.base.user.authprofile.access_token)
-        connection.put_file("%s/%s.py" % (instance.base.name, instance.name), instance.module)
+        gevent.spawn(connection.put_file("%s/%s.py" % (instance.base.name, instance.name), instance.module))
         if kwargs.get('created'):
-            connection.put_file("%s/app.config" % (instance.base.name), instance.base.config)
+            gevent.spawn(connection.put_file("%s/app.config" % (instance.base.name), instance.base.config))
     except Exception, e:
         print e
 
@@ -143,7 +144,7 @@ def synchronize_base_to_storage(sender, *args, **kwargs):
     instance = kwargs['instance']
     try:
         connection = Connection(instance.user.authprofile.access_token)
-        connection.put_file("%s/index.html" % instance.name, instance.content)
+        gevent.spawn(connection.put_file("%s/index.html" % instance.name, instance.content))
     except Exception, e:
         print e
 
