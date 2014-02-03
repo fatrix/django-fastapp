@@ -3,6 +3,8 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.template import Template
 from django_extensions.db.fields import UUIDField
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 from fastapp.utils import Connection, NotFound
 import ConfigParser
 import io
@@ -100,8 +102,12 @@ class Exec(models.Model):
     module = models.CharField(max_length=8192)
     base = models.ForeignKey(Base, related_name="execs", blank=True, null=True)
 
-from django.db.models.signals import post_save, post_delete
-from django.dispatch import receiver
+class Setting(models.Model):
+    base = models.ForeignKey(Base, related_name="setting")
+    key = models.CharField(max_length=128)
+    value = models.CharField(max_length=8192)
+
+
 
 @receiver(post_save, sender=Base)
 def initialize_on_storage(sender, *args, **kwargs):

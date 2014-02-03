@@ -6,7 +6,9 @@ import copy
 import pusher
 import hashlib
 import dropbox
+from bunch import Bunch
 
+from django.core import serializers
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.contrib import messages
@@ -25,7 +27,7 @@ from fastapp.utils import message
 from fastapp import __version__ as version
 
 from utils import UnAuthorized, Connection, NoBasesFound
-from fastapp.models import AuthProfile, Base, Exec
+from fastapp.models import AuthProfile, Base, Exec, Setting
 
 class DjendStaticView(View):
 
@@ -102,8 +104,14 @@ class DjendExecView(View, DjendMixin):
             func.warn=warn
             func.error=error
 
+            # attatch settings
+            setting_dict = do_kwargs['base_model'].setting.all().values('key', 'value')
+            setting_dict1 = Bunch()
+            for setting in setting_dict:
+                setting_dict1.update({setting['key']: setting['value']})
+            func.settings = setting_dict1
+
             returned = func(func)
-            print returned
         except Exception, e:
             exception = "%s: %s" % (type(e).__name__, e.message)
             traceback.print_exc()
@@ -120,7 +128,7 @@ class DjendExecView(View, DjendMixin):
             warn(channel_name_for_user(request), "404 on %s" % request.META['PATH_INFO'])
             return HttpResponseNotFound("404 on %s" % request.META['PATH_INFO'])
 
-        do_kwargs = {'request': request}
+        do_kwargs = {'request': request, 'base_model': base_model}
         data = self._do(exec_model.module, do_kwargs)
         data.update({'id': kwargs['id']})
 
@@ -250,6 +258,43 @@ class DjendBaseDeleteView(View):
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
         return super(DjendBaseDeleteView, self).dispatch(*args, **kwargs)
+
+
+class DjendBaseSettingsView(View):
+
+    def get(self, request, *args, **kwargs):
+        base = Base.objects.get(name=kwargs['base'])
+        base_settings = base.setting.all().extra(\
+            select={'lower_key':'lower(key)'}).order_by('lower_key').values('key', 'value', 'id')
+        return HttpResponse(json.dumps(list(base_settings)), content_type="application/json")
+
+    def delete(self, request, *args, **kwargs):
+        base = Base.objects.get(name=kwargs['base'])
+        base_setting = base.setting.get(id=kwargs['id'])
+        base_setting.delete()
+        return HttpResponse(content_type="application/json")
+
+    def post(self, request, *args, **kwargs):
+        base_settings = json.loads(request.POST.get('settings'))
+        try:
+            for setting in base_settings:
+                print setting
+                base = Base.objects.get(name=kwargs['base'])
+                if setting.has_key('id'):
+                    setting_obj = Setting.objects.get(base=base, id=setting['id'])
+                    setting_obj.key = setting['key']
+                else:
+                    setting_obj = Setting(key=setting['key'], base=base)
+                setting_obj.value = setting['value']
+                setting_obj.save()
+        except Exception:
+            traceback.print_exc()
+        return HttpResponse({}, content_type="application/json")
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendBaseSettingsView, self).dispatch(*args, **kwargs)
+
 
 class DjendExecDeleteView(View):
 
