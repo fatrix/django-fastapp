@@ -264,7 +264,8 @@ class DjendBaseSettingsView(View):
 
     def get(self, request, *args, **kwargs):
         base = Base.objects.get(name=kwargs['base'])
-        base_settings = base.setting.all().values('key', 'value', 'id')
+        base_settings = base.setting.all().extra(\
+            select={'lower_key':'lower(key)'}).order_by('lower_key').values('key', 'value', 'id')
         return HttpResponse(json.dumps(list(base_settings)), content_type="application/json")
 
     def delete(self, request, *args, **kwargs):
@@ -276,13 +277,16 @@ class DjendBaseSettingsView(View):
     def post(self, request, *args, **kwargs):
         base_settings = json.loads(request.POST.get('settings'))
         try:
-            id_saved = []
             for setting in base_settings:
+                print setting
                 base = Base.objects.get(name=kwargs['base'])
-                setting_obj, created = Setting.objects.get_or_create(key=setting['key'], base=base)
+                if setting.has_key('id'):
+                    setting_obj = Setting.objects.get(base=base, id=setting['id'])
+                    setting_obj.key = setting['key']
+                else:
+                    setting_obj = Setting(key=setting['key'], base=base)
                 setting_obj.value = setting['value']
-                id = setting_obj.save()
-                id_saved.append(id)
+                setting_obj.save()
         except Exception:
             traceback.print_exc()
         return HttpResponse({}, content_type="application/json")

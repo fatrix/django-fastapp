@@ -59,8 +59,10 @@ app.controller('MyCtrl', ['$scope', '$http', '$base64', function($scope, $http, 
         enableCellSelection: true,
         enableRowSelection: true,
         enableCellEditOnFocus: true,
-        columnDefs: [{field: 'key', displayName: 'Key', enableCellEdit: true},
-                     {field: 'value', displayName:'Value', enableCellEdit: true}]
+        columnDefs: [{field: 'key', displayName: 'Key', enableCellEdit: true, width: 120},
+                     {field: 'value', displayName:'Value', enableCellEdit: true,
+                        editableCellTemplate: '<textarea row="1"  ng-class="\'colt\' + col.index" ng-input="COL_FIELD" ng-model="COL_FIELD" />'
+                   }]
     };
 
     $scope.init = function() {
@@ -146,6 +148,16 @@ $(function() {
        console.log(event.currentTarget);
        $.post("/fastapp/"+window.active_base+"/clone/"+exec_name+"/", function(data) {
           if (data.redirect) {redirect(data.redirect); }
+       });
+          //$.post("/fastapp/"+window.active_base+"/delete/"+exec_name+"/", function(xhr, textStatus){
+          //  location.reload();
+          //});
+    });
+
+    $("button[id^=exec").click(function(event) {
+      exec_name = $(event.currentTarget).attr('exec');
+       event.preventDefault();
+       $.get("/fastapp/"+window.active_base+"/exec/"+exec_name+"/?json", function(data) {
        });
           //$.post("/fastapp/"+window.active_base+"/delete/"+exec_name+"/", function(xhr, textStatus){
           //  location.reload();

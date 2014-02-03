@@ -184,42 +184,22 @@
                              })
                             });
                         </script>
-                        <h3>Settings</h3>
-                        <!--<div class="table-responsive" ng-app="myApp" ng-controller="MyCtrl" ng-init="init()">-->
                         <div class="table-responsive" ng-app="myApp" ng-controller="MyCtrl" ng-init="init()">
+                            <h3>Settings 
+
+                                <button type="button" class="btn btn-default btn-xs" ng-click="addRow()">
+                                <span class="glyphicon glyphicon-plus"></span> Add row</button>
+
+                                <button type="button" class="btn btn-default btn-xs" ng-click="save()">
+                                <span class="glyphicon glyphicon-save"></span> Save</button>
+
+                                <button type="button" class="btn btn-default btn-xs" ng-click="delete(gridOptions.selectedItems)">
+                                <span class="glyphicon glyphicon-minus"></span> Delete selected</button>
+
+                            </h3>
+
                             <div class="gridStyle" ng-grid="gridOptions"></div>
 
-                            <button type="button" class="btn btn-default btn-xs" ng-click="addRow()">
-                            <span class="glyphicon glyphicon-plus"></span> Add row</button>
-
-                            <button type="button" class="btn btn-default btn-xs" ng-click="save()">
-                            <span class="glyphicon glyphicon-save"></span> Save</button>
-
-                            <button type="button" class="btn btn-default btn-xs" ng-click="delete(gridOptions.selectedItems)">
-                            <span class="glyphicon glyphicon-minus"></span> Delete selected</button>
-
-                            {% verbatim %}
-                            <pre>{{gridOptions.selectedItems}}</pre>
-                            {% endverbatim %}
-
-                            <table class="table settings">
-                              <thead>
-                                <tr>
-                                  <th>#</th>
-                                  <th>Key</th>
-                                  <th>Value</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {% for key, value in settings.items %}
-                                <tr>
-                                  <td>{{ forloop.counter }}</td>
-                                  <td>{{ key }}</td>
-                                  <td><span class="glyphicon glyphicon-edit"></span> <span class="value">{{ value }}</span></td>
-                                </tr>
-                                {% endfor %}
-                              </tbody>
-                            </table>
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -239,9 +219,11 @@
                                 <span class="glyphicon glyphicon-remove"></span> Delete</button>
                                 <button id="clone_exec_{{ exec.name }}" exec="{{ exec.name }}" type="button" class="btn btn-default btn-xs">
                                 <span class="glyphicon glyphicon-chevron-down"></span> Clone</button>
+                                <button id="exec_{{ exec.name }}" exec="{{ exec.name }}" type="button" class="btn btn-default btn-xs">
+                                <span class="glyphicon glyphicon-fire"></span> Execute</button>
                                 {% endif %}
                             </h2>
-                            <p><a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json</a></p>
+                            <!--<p><a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json</a></p>-->
                             <p>
                             <form id="edit_exec_{{ exec.name}}" class="code">
                                 <textarea id="exec_code_for_{{ exec.name }}" name="exec_code_for_{{ exec.name }}">{{ exec.module }}</textarea>
