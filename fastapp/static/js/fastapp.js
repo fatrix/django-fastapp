@@ -30,28 +30,17 @@ function add_message(data) {
     $("div#messages p").slice(7).remove();
 }
 
-//function send_me(broadcast_message, cb, arg) {
-//    $.post("/fastapi/"+window.active_base+"/message/", {'message': broadcast_message}, function(data) {
-//        cb(arg);
-//      });
-//}
-
 function redirect(location) {
     window.location = location;
 }
 
-/*
-*/
-var app = angular.module('myApp', ['ngGrid', 'base64']);
-app.controller('MyCtrl', ['$scope', '$http', '$base64', function($scope, $http, $base64) {
+window.app = angular.module('execApp', ['ngGrid', 'base64']);
+window.app.controller('MyCtrl', ['$scope', '$http', '$base64', function($scope, $http, $base64) {
     $scope.myData = [{name: "Moroni", age: 50},
                      {name: "Tiancum", age: 43},
                      {name: "Jacob", age: 27},
                      {name: "Nephi", age: 29},
                      {name: "Enos", age: 34}];
-    /*$scope.myData = [ 
-                     {key: "API", value: 43}
-    ];*/
     $scope.myData = [];
     $scope.gridOptions = {
         data: 'myData',
@@ -99,8 +88,9 @@ app.controller('MyCtrl', ['$scope', '$http', '$base64', function($scope, $http, 
       // delete from scope
       var index = $scope.myData.indexOf(item[0]);
       $scope.myData.splice(index,1);
+
+      // delete selected on server
       $scope.gridOptions.selectedItems.map(function(item) {
-        console.log(item.id);
         if (item.id !== undefined) {
           $http.delete("/fastapp/"+window.active_base+"/kv/"+item.id+"/", function(xhr, textStatus){
             console.log(textStatus);
