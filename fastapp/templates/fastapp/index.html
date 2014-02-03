@@ -216,8 +216,13 @@
                                 <span class="glyphicon glyphicon-remove"></span> Delete</button>
                                 <button id="clone_exec_{{ exec.name }}" exec="{{ exec.name }}" type="button" class="btn btn-default btn-xs">
                                 <span class="glyphicon glyphicon-chevron-down"></span> Clone</button>
+
                                 <button id="exec_{{ exec.name }}" exec="{{ exec.name }}" type="button" class="btn btn-default btn-xs">
                                 <span class="glyphicon glyphicon-fire"></span> Execute</button>
+
+                                <button id="rename_exec_{{ exec.name }}" exec="{{ exec.name }}" type="button" class="btn btn-default btn-xs">
+                                <span class="glyphicon glyphicon-fire"></span> Rename</button>
+
                                 {% endif %}
                             </h2>
                             <!--<p><a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json</a></p>-->

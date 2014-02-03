@@ -139,9 +139,6 @@ $(function() {
        $.post("/fastapp/"+window.active_base+"/clone/"+exec_name+"/", function(data) {
           if (data.redirect) {redirect(data.redirect); }
        });
-          //$.post("/fastapp/"+window.active_base+"/delete/"+exec_name+"/", function(xhr, textStatus){
-          //  location.reload();
-          //});
     });
 
     $("button[id^=exec").click(function(event) {
@@ -149,18 +146,30 @@ $(function() {
        event.preventDefault();
        $.get("/fastapp/"+window.active_base+"/exec/"+exec_name+"/?json", function(data) {
        });
-          //$.post("/fastapp/"+window.active_base+"/delete/"+exec_name+"/", function(xhr, textStatus){
-          //  location.reload();
-          //});
     });
 
     $("button[id=create_exec").click(function(event) {
       parent = $(event.currentTarget).parent();
       input = $('<div class="row"> <div class="col-lg-6"> <div class="input-group"> <input type="text" class="form-control"> <span class="input-group-btn"> <button class="btn btn-default" type="button"><span class="glyphicon glyphicon-save"></span> Save</button> </span> </div>');
       parent.after(input);
+      event.preventDefault();
       input.find("button").click(function(event) {
           input_value = input.find("input").val();
           $.post("/fastapp/"+window.active_base+"/create_exec/", {'exec_name': input_value}, function(xhr, textStatus){
+            location.reload();
+          });
+      });
+
+    });
+
+    $("button[id^=rename_exec").click(function(event) {
+      parent = $(event.currentTarget).parent();
+      exec_name = $(event.currentTarget).attr('exec');
+      input = $('<div class="row"> <div class="col-lg-6"> <div class="input-group"> <input type="text" value="'+exec_name+'" class="form-control"> <span class="input-group-btn"> <button class="btn btn-default" type="button"><span class="glyphicon glyphicon-save"></span> Save</button> </span> </div>');
+      parent.after(input);
+      input.find("button").click(function(event) {
+          input_value = input.find("input").val();
+          $.post("/fastapp/"+window.active_base+"/rename/"+exec_name+"/", {'new_name': input_value}, function(xhr, textStatus){
             location.reload();
           });
       });
@@ -214,9 +223,6 @@ $(function() {
             });
         } else if (event.currentTarget.method == "get") {
             $.get(event.currentTarget.action, $(this).serialize(), function(data){
-                //if (data.redirect) {
-                //  send_me("redirecting browser to: "+data.redirect, redirect, data.redirect)
-                //}
                 if (data.redirect) {
                   redirect(data.redirect);
                 }

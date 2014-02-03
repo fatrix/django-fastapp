@@ -94,6 +94,8 @@ class DjendExecView(View, DjendMixin):
             func.request=do_kwargs['request']
             func.session=do_kwargs['request'].session
 
+            func.name = do_kwargs['exec_name']
+
             # attach GET and POST data
             func.GET=copy.deepcopy(request.GET)
             func.POST=copy.deepcopy(request.POST)
@@ -128,7 +130,7 @@ class DjendExecView(View, DjendMixin):
             warn(channel_name_for_user(request), "404 on %s" % request.META['PATH_INFO'])
             return HttpResponseNotFound("404 on %s" % request.META['PATH_INFO'])
 
-        do_kwargs = {'request': request, 'base_model': base_model}
+        do_kwargs = {'request': request, 'base_model': base_model, 'exec_name': exec_id}
         data = self._do(exec_model.module, do_kwargs)
         data.update({'id': kwargs['id']})
 
@@ -336,7 +338,21 @@ class DjendExecCloneView(View):
 
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
-        return super(DjendExecCloneView, self).dispatch(*args, **kwargs)
+        return super(DjendExecCloneView, self).dispatch(*args, **kwargs) 
+
+class DjendExecRenameView(View):
+
+    def post(self, request, *args, **kwargs):
+        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
+        exec_model = base.execs.get(name=kwargs['id'])
+        exec_model.name = request.POST.get('new_name')
+        exec_model.save()
+        response_data = {"redirect": request.META['HTTP_REFERER']}
+        return HttpResponse(json.dumps(response_data), content_type="application/json")
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendExecRenameView, self).dispatch(*args, **kwargs) 
 
 class DjendBaseSaveView(View):
 
