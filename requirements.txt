@@ -5,3 +5,4 @@ pusher==0.8
 mongoengine==0.8.6
 pymongo==2.6.3
 bunch==1.0.1
+gevent==1.0
