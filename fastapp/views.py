@@ -577,11 +577,12 @@ def sign(data):
     return "%s-%s" % (data, m.hexdigest()[:10])
 
 def channel_name_for_user(request):
-        if request.user.username:
-            channel_name = "%s-%s" % (request.user.username, sign(request.user.username))
-        else:
-            channel_name = "anon-%s" % sign(request.session.session_key)
-        return channel_name
+    if request.user.is_authenticated():
+        channel_name = "%s-%s" % (request.user.username, sign(request.user.username))
+    else:
+        #channel_name = "anon-%s" % sign(request.session.session_key)
+        channel_name = "anon-%s" % sign(request.META['REMOTE_ADDR'])
+    return channel_name
 
 
 def user_message(level, username, message):
