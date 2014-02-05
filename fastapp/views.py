@@ -8,7 +8,6 @@ import hashlib
 import dropbox
 from bunch import Bunch
 
-from django.core import serializers
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.contrib import messages
@@ -18,10 +17,9 @@ from django.template import RequestContext
 from django.template.loader import render_to_string
 from django.views.generic import View
 from django.views.decorators.csrf import csrf_exempt
-from django.http import HttpResponseNotFound, HttpResponse, HttpResponseRedirect, HttpResponseBadRequest, HttpResponseForbidden
+from django.http import HttpResponseNotFound, HttpResponse, HttpResponseRedirect, HttpResponseBadRequest, HttpResponseForbidden, HttpResponseServerError
 from django.views.generic.base import ContextMixin
 from django.conf import settings
-import dropbox
 from dropbox.rest import ErrorResponse
 from fastapp.utils import message
 from fastapp import __version__ as version
@@ -131,20 +129,27 @@ class DjendExecView(View, DjendMixin):
             return HttpResponseNotFound("404 on %s" % request.META['PATH_INFO'])
 
         do_kwargs = {'request': request, 'base_model': base_model, 'exec_name': exec_id}
-        data = self._do(exec_model.module, do_kwargs)
+        try:
+            data = self._do(exec_model.module, do_kwargs)
+        except Exception, e:
+            error(channel_name_for_user(request), e.msg)
+            return HttpResponseServerError(e.msg)
+
+        # add exec's id to the response dict
         data.update({'id': kwargs['id']})
 
+        # respond with json
         if request.GET.has_key('json'):
             user = channel_name_for_user(request)
             if data['status'] == "OK":
                 info(user, str(data))
             elif data['status'] == "NOK":
                 error(user, str(data))
+
+            # the exec can return an HttpResponseRedirect object, where we redirect
             if isinstance(data['returned'], HttpResponseRedirect):
-                #return data
                 location = data['returned']['Location']
                 info(user, "(%s) Redirect to: %s" % (exec_id, location))
-                print location
                 return HttpResponse(json.dumps({'redirect': data['returned']['Location']}), content_type="application/json")
             else:
                 return HttpResponse(json.dumps(data), content_type="application/json")
@@ -361,7 +366,6 @@ class DjendBaseRenameView(View):
         base.name = request.POST.get('new_name')
         base.save()
         response_data = {"redirect": request.META['HTTP_REFERER'].replace(kwargs['base'], base.name)}
-        print response_data
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 
     @csrf_exempt
@@ -379,9 +383,12 @@ class DjendBaseSaveView(View):
             exec_name = request.POST.get('exec_name')
             # save in database
             e = base.execs.get(name=exec_name)
-            e.module = content
-            e.save()
-            info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
+            if len(content) > 8200:
+                error(channel_name_for_user(request), "Exec '%s' is to big." % exec_name)
+            else:    
+                e.module = content
+                e.save()
+                info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
         # base
         else:
             base.content = content
@@ -581,6 +588,8 @@ def channel_name_for_user(request):
         channel_name = "%s-%s" % (request.user.username, sign(request.user.username))
     else:
         #channel_name = "anon-%s" % sign(request.session.session_key)
+        # TODO: find a way to identify anonymous user
+        #     problem on initial
         channel_name = "anon-%s" % sign(request.META['REMOTE_ADDR'])
     return channel_name
 
@@ -588,12 +597,15 @@ def channel_name_for_user(request):
 def user_message(level, username, message):
 
     channel = username
+    # TODO: strip message to max 10KB
+    # http://pusher.com/docs/server_api_guide/server_publishing_events
 
     p = pusher.Pusher(
       app_id=settings.PUSHER_APP_ID,
       key=settings.PUSHER_KEY,
       secret=settings.PUSHER_SECRET
     )
+
     now = datetime.datetime.now()
     if level == logging.INFO:
         class_level = "info"        
@@ -613,5 +625,4 @@ def debug(username, gmessage):
 def error(username, gmessage): 
         return user_message(logging.ERROR, username, gmessage)
 def warn(username, gmessage): 
-        print "WARN"
         return user_message(logging.WARN, username, gmessage)
