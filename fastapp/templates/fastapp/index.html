@@ -214,6 +214,9 @@
                             </p>
                             {% for exec in FASTAPP_EXECS %}
                             <h4>{{ exec.name }}</h4>
+                            <p class="light">
+                                {{ exec.description }}
+                            </p>
                             <div>
                             <button id="edit_exec_{{ exec.name }}" type="button" class="btn btn-default btn-xs">
                             <span class="glyphicon glyphicon-edit"></span> Edit</button>
@@ -230,11 +233,15 @@
                             <span class="glyphicon glyphicon-pencil"></span> Rename</button>
                             {% endif %}
                             </div>
-                            <!--<p><a class="exec" href="/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json">/fastapp/{{active_base.name}}/exec/{{exec.name}}/?json</a></p>-->
                             <p>
-                            <form id="edit_exec_{{ exec.name}}" class="code">
-                                <textarea id="exec_code_for_{{ exec.name }}" name="exec_code_for_{{ exec.name }}">{{ exec.module }}</textarea>
-                            </form>
+                                <form id="edit_exec_{{ exec.name}}" class="code">
+                                    <textarea id="exec_code_for_{{ exec.name }}" name="exec_code_for_{{ exec.name }}">{{ exec.module }}</textarea>
+                                </form>
+                            </p>
+                            <p>
+                                <form id="edit_execs_description_{{ exec.name}}" class="code">
+                                    <textarea class="form-control" id="exec_description_for_{{ exec.name }}" name="exec_description_for_{{ exec.name }}">{{ exec.description }}</textarea>
+                                </form>
                             </p>
                             <script>
                                 /* code */
@@ -255,7 +262,8 @@
                                 editor.on("blur", function(cm, cmChangeObject){
                                   $.post("/fastapp/{{ active_base.name }}/sync/", {
                                     content: cm.getValue(),
-                                    exec_name: "{{ exec.name }}"
+                                    exec_name: "{{ exec.name }}",
+                                    exec_description: $('#exec_description_for_{{ exec.name }}').val()
                                  })
                                 });
                             </script>

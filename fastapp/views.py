@@ -393,6 +393,8 @@ class DjendBaseSaveView(View):
                 error(channel_name_for_user(request), "Exec '%s' is to big." % exec_name)
             else:    
                 e.module = content
+                e.description = request.POST.get('exec_description')
+                print e.description
                 e.save()
                 info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
         # base

@@ -37,6 +37,7 @@ class Base(models.Model):
         for texec in self.execs.all():
             config.add_section(texec.name)
             config.set(texec.name, 'module', texec.name+".py")
+            config.set(texec.name, 'description', "\"%s\"" % texec.description)
         config_string = StringIO.StringIO()
         config.write(config_string)
         return config_string.getvalue()
@@ -102,6 +103,7 @@ class Exec(models.Model):
     name = models.CharField(max_length=64)
     module = models.CharField(max_length=8192)
     base = models.ForeignKey(Base, related_name="execs", blank=True, null=True)
+    description = models.CharField(max_length=1024, blank=True, null=True)
 
 class Setting(models.Model):
     base = models.ForeignKey(Base, related_name="setting")
