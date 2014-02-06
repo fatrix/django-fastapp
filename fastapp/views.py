@@ -31,13 +31,16 @@ class DjendStaticView(View):
 
     def get(self, request, *args, **kwargs):
         static_path = "%s/%s/%s" % (kwargs['base'], "static", kwargs['name'])
-        try:
-
+        from django.core.cache import cache
+        f = cache.get(static_path)
+        if not f:
             base_model = Base.objects.get(name=kwargs['base'])
             auth_token = base_model.user.authprofile.access_token
             client = dropbox.client.DropboxClient(auth_token)
+            # TODO: check if in cache?
             f = client.get_file(static_path).read()
-
+            cache.set(static_path, f, 60)
+        try:
             # default
             mimetype = "text/plain"
             if static_path.endswith('.js'):
@@ -49,6 +52,7 @@ class DjendStaticView(View):
             return HttpResponse(f, mimetype=mimetype)
         except ErrorResponse, e:
             return HttpResponseNotFound("Not found: "+static_path)
+
 
 
 class DjendMixin(object):
@@ -109,6 +113,7 @@ class DjendExecView(View, DjendMixin):
             setting_dict1 = Bunch()
             for setting in setting_dict:
                 setting_dict1.update({setting['key']: setting['value']})
+            setting_dict1.update({'STATIC_DIR': "/%s/%s/static/" % ("fastapp", do_kwargs['base_model'].name)})
             func.settings = setting_dict1
 
             returned = func(func)
@@ -154,7 +159,8 @@ class DjendExecView(View, DjendMixin):
             else:
                 return HttpResponse(json.dumps(data), content_type="application/json")
 
-        return HttpResponseRedirect("/fastapp/%s/index/?done=%s" % (base, exec_id))
+        return HttpResponse(data['returned'])
+        #return HttpResponseRedirect("/fastapp/%s/index/?done=%s" % (base, exec_id))
 
     @csrf_exempt
     def post(self, request, *args, **kwargs):
@@ -560,20 +566,26 @@ def dropbox_auth_finish(request):
 
 def login_or_sharedkey(function):
     def wrapper(request, *args, **kwargs):
+        #import pdb; pdb.set_trace()
         user=request.user
         # if logged in
         if user.is_authenticated():
             return function(request, *args, **kwargs)
         # if shared key in query string
+        base_name = kwargs.get('base')
         if request.GET.has_key('shared_key'):
             shared_key = request.GET.get('shared_key')
-            base_name = kwargs.get('base')
             get_object_or_404(Base, name=base_name, uuid=shared_key)
             request.session['shared_key'] = shared_key
             return function(request, *args, **kwargs)
-        # if shared key in session
-        if request.session.__contains__('shared_key'):
+        # if shared key in session and corresponds to base
+        has_shared_key = request.session.__contains__('shared_key')
+        if has_shared_key:
+            get_object_or_404(Base, name=base_name, uuid=request.session['shared_key'])
             return function(request, *args, **kwargs)
+        # don't redirect when access a exec withoud secret key
+        if kwargs.has_key('id'):
+            return HttpResponseNotFound('Ups, wrong URL?')
         return HttpResponseRedirect("/admin/")
     return wrapper
 

@@ -12,7 +12,7 @@ urlpatterns = patterns('',
     url(r'dropbox_auth_finish/?$',dropbox_auth_finish),
 
     # base
-    url(r'(?P<base>[\w-]+)/index/$', login_or_sharedkey(DjendBaseView.as_view())),
+    url(r'(?P<base>[\w-]+)/index/$', login_required(DjendBaseView.as_view())),
     url(r'(?P<base>[\w-]+)/sync/$', login_required(DjendBaseSaveView.as_view())),
     url(r'(?P<base>[\w-]+)/new/$', login_required(DjendBaseCreateView.as_view())),
     url(r'(?P<base>[\w-]+)/delete/$', login_required(DjendBaseDeleteView.as_view())),
@@ -33,7 +33,7 @@ urlpatterns = patterns('',
     url(r'(?P<base>[\w-]+)/rename/(?P<id>\w+)/$', \
                                             login_required(DjendExecRenameView.as_view())),
     # static
-    url(r'(?P<base>[\w-]+)/static/(?P<name>[\w.-_]+)/', \
+    url(r'(?P<base>[\w-]+)/static/(?P<name>.+)', \
                                             login_or_sharedkey(DjendStaticView.as_view())),
     # home
     url(r'^$', DjendView.as_view())
