@@ -20,8 +20,9 @@ class AuthProfile(models.Model):
 class Base(models.Model):
     name = models.CharField(max_length=32)
     uuid = UUIDField(auto=True)
-    content = models.CharField(max_length=8192)
+    content = models.CharField(max_length=8192, blank=True)
     user = models.ForeignKey(User, related_name='+', default=0, blank=True)
+    public = models.BooleanField(default=False)
 
     @property
     def url(self):

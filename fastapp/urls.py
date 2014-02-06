@@ -1,9 +1,12 @@
 from django.conf.urls import patterns, url
 from django.contrib.auth.decorators import login_required
+from django.conf.urls import patterns, include
+from django.contrib import admin
 from fastapp.views import DjendBaseView, DjendBaseSaveView, DjendBaseDeleteView, DjendExecCloneView, DjendExecSaveView, \
                 DjendBaseCreateView, DjendExecDeleteView, DjendExecView, DjendStaticView, \
                 login_or_sharedkey, dropbox_auth_finish, dropbox_auth_start, DjendView, \
                 DjendBaseSettingsView, DjendExecRenameView, DjendBaseRenameView
+
 
 urlpatterns = patterns('',
 
@@ -38,3 +41,5 @@ urlpatterns = patterns('',
     # home
     url(r'^$', DjendView.as_view())
 )
+
+

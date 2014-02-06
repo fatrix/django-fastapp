@@ -1,8 +1,11 @@
 import datetime
 import logging
-import StringIO
-from django.contrib import messages
 import dropbox
+import pusher
+import StringIO
+import hashlib
+from django.contrib import messages
+from django.conf import settings
 from dropbox.rest import ErrorResponse
 
 
@@ -75,3 +78,53 @@ def message(request, level, message):
     elif level == logging.WARN:
         tag = "alert-info"
     messages.error(request, dt + " " + str(message)[:1000], extra_tags="%s safe" % tag)
+
+def sign(data):
+    m = hashlib.md5()
+    m.update(data)
+    m.update(settings.SECRET_KEY)
+    return "%s-%s" % (data, m.hexdigest()[:10])
+
+def channel_name_for_user(request):
+    if request.user.is_authenticated():
+        channel_name = "%s-%s" % (request.user.username, sign(request.user.username))
+    else:
+        #channel_name = "anon-%s" % sign(request.session.session_key)
+        # TODO: find a way to identify anonymous user
+        #     problem on initial
+        channel_name = "anon-%s" % sign(request.META['REMOTE_ADDR'])
+    return channel_name
+
+
+def user_message(level, username, message):
+
+    channel = username
+    # TODO: strip message to max 10KB
+    # http://pusher.com/docs/server_api_guide/server_publishing_events
+
+    p = pusher.Pusher(
+      app_id=settings.PUSHER_APP_ID,
+      key=settings.PUSHER_KEY,
+      secret=settings.PUSHER_SECRET
+    )
+
+    now = datetime.datetime.now()
+    if level == logging.INFO:
+        class_level = "info"        
+    elif level == logging.DEBUG:
+        class_level = "debug"        
+    elif level == logging.WARNING:
+        class_level = "warn"        
+    elif level == logging.ERROR:
+        class_level = "error"        
+
+    p[channel].trigger('console_msg', {'datetime': str(now), 'message': str(message), 'class': class_level})
+
+def info(username, gmessage): 
+        return user_message(logging.INFO, username, gmessage)
+def debug(username, gmessage): 
+        return user_message(logging.DEBUG, username, gmessage)
+def error(username, gmessage): 
+        return user_message(logging.ERROR, username, gmessage)
+def warn(username, gmessage): 
+        return user_message(logging.WARN, username, gmessage)
