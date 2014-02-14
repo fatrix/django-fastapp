@@ -11,7 +11,6 @@ import io
 import StringIO
 import gevent
 
-
 class AuthProfile(models.Model):
     user = models.OneToOneField(User, related_name="authprofile")
     access_token = models.CharField(max_length=72)
@@ -35,7 +34,7 @@ class Base(models.Model):
     @property
     def config(self):
         config = ConfigParser.RawConfigParser()
-        for texec in self.execs.all():
+        for texec in self.apys.all():
             config.add_section(texec.name)
             config.set(texec.name, 'module', texec.name+".py")
             config.set(texec.name, 'description', "\"%s\"" % texec.description)
@@ -81,16 +80,16 @@ class Base(models.Model):
                         print e
 
                 # save new exec
-                app_exec_model, created = Exec.objects.get_or_create(base=self, name=name)
+                app_exec_model, created = Apy.objects.get_or_create(base=self, name=name)
                 app_exec_model.module = module_content
                 app_exec_model.save()
                 
             # delete old exec
-            for local_exec in Exec.objects.filter(base=self).values('name'):
+            for local_exec in Apy.objects.filter(base=self).values('name'):
                 if local_exec['name'] in config.sections():
                     print "exists"
                 else:
-                    Exec.objects.get(base=self, name=local_exec['name']).delete()
+                    Apy.objects.get(base=self, name=local_exec['name']).delete()
 
 
     def template(self, context):
@@ -100,10 +99,12 @@ class Base(models.Model):
     def __str__(self):
         return "<Base: %s>" % self.name
 
-class Exec(models.Model):
+MODULE_DEFAULT_CONTENT = """def func(self):\n    pass"""
+
+class Apy(models.Model):
     name = models.CharField(max_length=64)
-    module = models.CharField(max_length=8192)
-    base = models.ForeignKey(Base, related_name="execs", blank=True, null=True)
+    module = models.CharField(max_length=8192, default=MODULE_DEFAULT_CONTENT)
+    base = models.ForeignKey(Base, related_name="apys", blank=True, null=True)
     description = models.CharField(max_length=1024, blank=True, null=True)
 
 class Setting(models.Model):
@@ -131,7 +132,7 @@ def initialize_on_storage(sender, *args, **kwargs):
     except Exception, e:
         print e
 
-@receiver(post_save, sender=Exec)
+@receiver(post_save, sender=Apy)
 def synchronize_to_storage(sender, *args, **kwargs):
     instance = kwargs['instance']
     try:
@@ -156,17 +157,17 @@ def base_to_storage_on_delete(sender, *args, **kwargs):
     instance = kwargs['instance']
     connection = Connection(instance.user.authprofile.access_token)
     try:
-        connection.delete_file("%s" % instance.name)
+        gevent.spawn(connection.delete_file("%s" % instance.name))
     except Exception, e:
         print e
 
-@receiver(post_delete, sender=Exec)
+@receiver(post_delete, sender=Apy)
 def synchronize_to_storage_on_delete(sender, *args, **kwargs):
     instance = kwargs['instance']
     try:
         connection = Connection(instance.base.user.authprofile.access_token)
-        connection.put_file("%s/app.config" % (instance.base.name), instance.base.config)
-        connection.delete_file("%s/%s.py" % (instance.base.name, instance.name))
+        gevent.spawn(connection.put_file("%s/app.config" % (instance.base.name), instance.base.config))
+        gevent.spawn(connection.delete_file("%s/%s.py" % (instance.base.name, instance.name)))
     except NotFound, e:
         print e
     except Base.DoesNotExist, e:

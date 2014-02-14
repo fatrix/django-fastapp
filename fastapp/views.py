@@ -25,7 +25,7 @@ from fastapp import __version__ as version
 
 from utils import UnAuthorized, Connection, NoBasesFound
 from utils import info, error, warn, channel_name_for_user, debug
-from fastapp.models import AuthProfile, Base, Exec, Setting
+from fastapp.models import AuthProfile, Base, Apy, Setting
 
 class DjendStaticView(View):
 
@@ -128,8 +128,8 @@ class DjendExecView(View, DjendMixin):
         exec_id = kwargs['id']
         base_model = get_object_or_404(Base, name=base)
         try:
-            exec_model = base_model.execs.get(name=exec_id)
-        except Exec.DoesNotExist:
+            exec_model = base_model.apys.get(name=exec_id)
+        except Apy.DoesNotExist:
             warn(channel_name_for_user(request), "404 on %s" % request.META['PATH_INFO'])
             return HttpResponseNotFound("404 on %s" % request.META['PATH_INFO'])
 
@@ -190,7 +190,7 @@ class DjendSharedView(View, ContextMixin):
         # context
         context['VERSION'] = version
         context['shared_bases'] = request.session['shared_bases']
-        context['FASTAPP_EXECS'] = base_model.execs.all().order_by('name')
+        context['FASTAPP_EXECS'] = base_model.apys.all().order_by('name')
         context['LAST_EXEC'] = request.GET.get('done')
         context['active_base'] = base_model
         context['FASTAPP_NAME'] = base_model.name
@@ -227,7 +227,7 @@ class DjendExecSaveView(View):
             # save in database
             #e = base.execs.get(name=exec_name)
             try:
-                e, created = Exec.objects.get_or_create(name=exec_name, base=base)
+                e, created = Apy.objects.get_or_create(name=exec_name, base=base)
                 if not created:
                     warn(channel_name_for_user(request), "Exec '%s' does already exist" % exec_name)
                     return HttpResponseBadRequest()
@@ -316,7 +316,7 @@ class DjendExecDeleteView(View):
 
         # syncing to storage provider
         # exec
-        e = base.execs.get(name=kwargs['id'])
+        e = base.apys.get(name=kwargs['id'])
         print e.delete()
         try:
             e.delete()
@@ -330,22 +330,22 @@ class DjendExecDeleteView(View):
     def dispatch(self, *args, **kwargs):
         return super(DjendExecDeleteView, self).dispatch(*args, **kwargs)
 
-class DjendExecCloneView(View):
-
-    def post(self, request, *args, **kwargs):
-        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
-        clone_count = base.execs.filter(name__startswith="%s_clone" % kwargs['id']).count()
-        created = False
-        while not created:
-            cloned_exec, created = Exec.objects.get_or_create(base=base, name="%s_clone_%s" % (kwargs['id'], str(clone_count+1)))
-            clone_count+=1
-
-        cloned_exec.module = base.execs.get(name=kwargs['id']).module
-        cloned_exec.save()
-
-
-        response_data = {"redirect": request.META['HTTP_REFERER']}
-        return HttpResponse(json.dumps(response_data), content_type="application/json")
+##class DjendExecCloneView(View):
+#
+#    def post(self, request, *args, **kwargs):
+#        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
+#        clone_count = base.apys.filter(name__startswith="%s_clone" % kwargs['id']).count()
+#        created = False
+#        while not created:
+#            cloned_exec, created = Apy.objects.get_or_create(base=base, name="%s_clone_%s" % (kwargs['id'], str(clone_count+1)))
+#            clone_count+=1
+#
+#        cloned_exec.module = base.apys.get(name=kwargs['id']).module
+#        cloned_exec.save()
+#
+#
+#        response_data = {"redirect": request.META['HTTP_REFERER']}
+#        return HttpResponse(json.dumps(response_data), content_type="application/json")
 
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
@@ -355,7 +355,7 @@ class DjendExecRenameView(View):
 
     def post(self, request, *args, **kwargs):
         base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
-        exec_model = base.execs.get(name=kwargs['id'])
+        exec_model = base.apys.get(name=kwargs['id'])
         exec_model.name = request.POST.get('new_name')
         exec_model.save()
         response_data = {"redirect": request.META['HTTP_REFERER']}
@@ -388,7 +388,7 @@ class DjendBaseSaveView(View):
         if request.POST.has_key('exec_name'):
             exec_name = request.POST.get('exec_name')
             # save in database
-            e = base.execs.get(name=exec_name)
+            e = base.apys.get(name=exec_name)
             if len(content) > 8200:
                 error(channel_name_for_user(request), "Exec '%s' is to big." % exec_name)
             else:    
@@ -444,7 +444,7 @@ class DjendBaseView(View, ContextMixin):
 
                 # execs
                 try:
-                    context['FASTAPP_EXECS'] = base_model.execs.all().order_by('name')
+                    context['FASTAPP_EXECS'] = base_model.apys.all().order_by('name')
                 except ErrorResponse, e:
                     messages.warning(request, "No app.json found", extra_tags="alert-warning")
                     logging.debug(e)
