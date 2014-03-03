@@ -19,6 +19,7 @@ from django.http import HttpResponseNotFound, HttpResponse, HttpResponseRedirect
 from django.views.generic.base import ContextMixin
 from django.conf import settings
 from django.views.generic import TemplateView
+from django.views.decorators.cache import never_cache
 from dropbox.rest import ErrorResponse
 from fastapp.utils import message
 from fastapp import __version__ as version
@@ -121,7 +122,7 @@ class DjendExecView(View, DjendMixin):
             exception = "%s: %s" % (type(e).__name__, e.message)
             traceback.print_exc()
             status = self.STATE_NOK
-        return {'status': status, 'returned': returned, 'exception': exception}
+        return {"status": status, "returned": returned, "exception": exception}
 
     def get(self, request, *args, **kwargs):
         base = kwargs['base']
@@ -141,14 +142,14 @@ class DjendExecView(View, DjendMixin):
             return HttpResponseServerError(e.msg)
 
         # add exec's id to the response dict
-        data.update({'id': kwargs['id']})
+        data.update({"id": kwargs['id']})
 
         # respond with json
-        if request.GET.has_key('json'):
+        if request.GET.has_key('json') or request.GET.has_key('callback'):
             user = channel_name_for_user(request)
-            if data['status'] == "OK":
+            if data["status"] == "OK":
                 info(user, str(data))
-            elif data['status'] == "NOK":
+            elif data["status"] == "NOK":
                 error(user, str(data))
 
             # the exec can return an HttpResponseRedirect object, where we redirect
@@ -157,6 +158,9 @@ class DjendExecView(View, DjendMixin):
                 info(user, "(%s) Redirect to: %s" % (exec_id, location))
                 return HttpResponse(json.dumps({'redirect': data['returned']['Location']}), content_type="application/json")
             else:
+                if request.GET.has_key('callback'):
+                    data = '%s(%s);' % (request.REQUEST['callback'], json.dumps(data))
+                    return HttpResponse(data, "application/javascript")
                 return HttpResponse(json.dumps(data), content_type="application/json")
 
         return HttpResponse(data['returned'])
@@ -347,19 +351,19 @@ class DjendExecDeleteView(View):
 #        response_data = {"redirect": request.META['HTTP_REFERER']}
 #        return HttpResponse(json.dumps(response_data), content_type="application/json")
 
-    @csrf_exempt
-    def dispatch(self, *args, **kwargs):
-        return super(DjendExecCloneView, self).dispatch(*args, **kwargs) 
+#    @csrf_exempt
+#    def dispatch(self, *args, **kwargs):
+#        return super(DjendExecCloneView, self).dispatch(*args, **kwargs) 
 
-class DjendExecRenameView(View):
-
-    def post(self, request, *args, **kwargs):
-        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
-        exec_model = base.apys.get(name=kwargs['id'])
-        exec_model.name = request.POST.get('new_name')
-        exec_model.save()
-        response_data = {"redirect": request.META['HTTP_REFERER']}
-        return HttpResponse(json.dumps(response_data), content_type="application/json")
+#class DjendExecRenameView(View):
+#
+#    def post(self, request, *args, **kwargs):
+#        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
+#        exec_model = base.apys.get(name=kwargs['id'])
+#        exec_model.name = request.POST.get('new_name')
+#        exec_model.save()
+#        response_data = {"redirect": request.META['HTTP_REFERER']}
+#        return HttpResponse(json.dumps(response_data), content_type="application/json")
 
     @csrf_exempt
     def dispatch(self, *args, **kwargs):

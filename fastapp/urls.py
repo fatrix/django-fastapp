@@ -4,7 +4,7 @@ from django.conf.urls import include
 from fastapp.views import DjendBaseView, DjendBaseSaveView, DjendBaseDeleteView, DjendExecSaveView, \
                 DjendBaseCreateView, DjendExecDeleteView, DjendExecView, DjendStaticView, \
                 login_or_sharedkey, dropbox_auth_finish, dropbox_auth_start, DjendView, \
-                DjendBaseSettingsView, DjendExecRenameView, DjendBaseRenameView
+                DjendBaseSettingsView, DjendBaseRenameView
 from rest_framework import viewsets, routers
 
 from fastapp.models import Base, Apy
@@ -42,8 +42,8 @@ urlpatterns = patterns('',
                                             login_required(DjendExecDeleteView.as_view())),
     #url(r'(?P<base>[\w-]+)/clone/(?P<id>\w+)/$', \
     #                                        login_required(DjendExecCloneView.as_view())),
-    url(r'(?P<base>[\w-]+)/rename/(?P<id>\w+)/$', \
-                                            login_required(DjendExecRenameView.as_view())),
+    #url(r'(?P<base>[\w-]+)/rename/(?P<id>\w+)/$', \
+    #                                        login_required(DjendExecRenameView.as_view())),
     # static
     url(r'(?P<base>[\w-]+)/static/(?P<name>.+)$', \
                                             login_or_sharedkey(DjendStaticView.as_view())),

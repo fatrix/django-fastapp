@@ -44,7 +44,6 @@ window.app.controller('ExecCtrl', ['$scope', '$http', '$base64', 'Apy', 'Apy1', 
 
   $scope.delete= function(apy) {
     //Apy1.update({'baseId': window.active_base_id, 'id': apy.id}, apy);
-    console.log(apy);
     Apy1.delete({'baseId': window.active_base_id, 'id': apy.id}, function(data) {
       var indx = $scope.apys.indexOf(apy);
       $scope.apys.splice(indx, 1);
@@ -65,7 +64,13 @@ window.app.controller('ExecCtrl', ['$scope', '$http', '$base64', 'Apy', 'Apy1', 
   $scope.rename=function($event) {
     new_exec_name = $($event.currentTarget.parentNode.parentNode).find('input').first().val();
     this.apy.name = new_exec_name;
-    $scope.save(this.apy);
+    this.apy.$save();
+    //$scope.save(this.apy);
+    //$scope.save(this.apy).success(function() {
+    //  console.log(this);
+    //  console.log($event);
+    //  this.show = false;
+    //});
   };
 
   /*$scope.$watch('apy.module', function(oldVal,newVal){
@@ -73,8 +78,6 @@ window.app.controller('ExecCtrl', ['$scope', '$http', '$base64', 'Apy', 'Apy1', 
     console.log(newVal);
     console.log("changed");
   });*/
-
-
 
 }]);
 
