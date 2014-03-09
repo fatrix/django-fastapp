@@ -28,8 +28,11 @@ from utils import UnAuthorized, Connection, NoBasesFound
 from utils import info, error, warn, channel_name_for_user, debug
 from fastapp.models import AuthProfile, Base, Apy, Setting
 
+from django.views.decorators.cache import never_cache
+
 class DjendStaticView(View):
 
+    @never_cache
     def get(self, request, *args, **kwargs):
         static_path = "%s/%s/%s" % (kwargs['base'], "static", kwargs['name'])
         from django.core.cache import cache
@@ -114,7 +117,7 @@ class DjendExecView(View, DjendMixin):
             setting_dict1 = Bunch()
             for setting in setting_dict:
                 setting_dict1.update({setting['key']: setting['value']})
-            setting_dict1.update({'STATIC_DIR': "/%s/%s/static/" % ("fastapp", do_kwargs['base_model'].name)})
+            setting_dict1.update({'STATIC_DIR': "/%s/%s/static" % ("fastapp", do_kwargs['base_model'].name)})
             func.settings = setting_dict1
 
             returned = func(func)
