@@ -29,39 +29,60 @@ from utils import info, error, warn, channel_name_for_user, debug
 from fastapp.models import AuthProfile, Base, Apy, Setting
 
 from django.views.decorators.cache import never_cache
+from django.core.cache import cache
+
+logger = logging.getLogger(__name__)
 
 class DjendStaticView(View):
 
     @never_cache
     def get(self, request, *args, **kwargs):
         static_path = "%s/%s/%s" % (kwargs['base'], "static", kwargs['name'])
-        from django.core.cache import cache
+        logger.info("get %s" % static_path)
+
         f = cache.get(static_path)
         if not f:
+            logger.info("not in cache: %s" % static_path)
             base_model = Base.objects.get(name=kwargs['base'])
             auth_token = base_model.user.authprofile.access_token
             client = dropbox.client.DropboxClient(auth_token)
             # TODO: check if in cache?
-            f = client.get_file(static_path).read()
+            try:
+                f = client.get_file(static_path).read()
+            except ErrorResponse, e:
+                logger.error("not found: '%s'" % static_path)
+                return HttpResponseNotFound("Not found: "+static_path)
             cache.set(static_path, f, 60)
-        try:
-            # default
-            mimetype = "text/plain"
-            if static_path.endswith('.js'):
-                mimetype = "text/javascript"
-            if static_path.endswith('.css'):
-                mimetype = "text/css"
-            if static_path.endswith('.png'):
-                mimetype = "image/png"
-            return HttpResponse(f, mimetype=mimetype)
-        except ErrorResponse, e:
-            return HttpResponseNotFound("Not found: "+static_path)
+            logger.info("cache it: '%s'" % static_path)
+        else:
+            logger.info("found in cache: '%s'" % static_path)
 
-
+        # default
+        mimetype = "text/plain"
+        if static_path.endswith('.js'):
+            mimetype = "text/javascript"
+        elif static_path.endswith('.css'):
+            mimetype = "text/css"
+        elif static_path.endswith('.png'):
+            mimetype = "image/png"
+        elif static_path.endswith('.woff'):
+            mimetype = "application/x-font-woff"
+        elif static_path.endswith('.svg'):
+            mimetype = "image/svg+xml"
+        elif static_path.endswith('.ttf'):
+            mimetype = "application/x-font-ttf"
+        elif static_path.lower().endswith('.jpg'):
+            mimetype = "image/jpeg"
+        else:
+            logger.error("suffix not recognized in '%s'" % static_path)
+            return HttpResponseServerError("Static file suffix not recognized")
+        logger.debug("deliver '%s' with '%s'" % (static_path, mimetype))
+        return HttpResponse(f, mimetype=mimetype)
 
 class DjendMixin(object):
 
     def connection(self, request):
+        logger.info("Creating connection for %s" % request.user)
         return Connection(request.user.authprofile.access_token)
 
 
@@ -77,6 +98,7 @@ class DjendExecView(View, DjendMixin):
         func = None 
 
         request = do_kwargs['request']
+        logger.info("do %s" % request)
         username = copy.copy(do_kwargs['request'].user.username)
 
         # debug incoming request
@@ -86,8 +108,8 @@ class DjendExecView(View, DjendMixin):
             query_string = copy.copy(request.POST)
         try:
             query_string.pop('json')
-        except KeyError:
-            pass
+        except KeyError, e:
+            logger.exception("invalid request")
 
         user = channel_name_for_user(request)
         debug(user, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
@@ -167,7 +189,6 @@ class DjendExecView(View, DjendMixin):
                 return HttpResponse(json.dumps(data), content_type="application/json")
 
         return HttpResponse(data['returned'])
-        #return HttpResponseRedirect("/fastapp/%s/index/?done=%s" % (base, exec_id))
 
     @csrf_exempt
     def post(self, request, *args, **kwargs):
@@ -246,7 +267,6 @@ class DjendExecSaveView(View):
                 return HttpResponseBadRequest(e)
         # base
 
-        #return HttpResponseRedirect("/fastapp/demo/index/")
         return HttpResponse('{"redirect": %s}' % request.META['HTTP_REFERER'])
 
     @csrf_exempt
@@ -298,7 +318,6 @@ class DjendBaseSettingsView(View):
         base_settings = json.loads(request.POST.get('settings'))
         try:
             for setting in base_settings:
-                print setting
                 base = Base.objects.get(name=kwargs['base'])
                 if setting.has_key('id'):
                     setting_obj = Setting.objects.get(base=base, id=setting['id'])
@@ -327,7 +346,6 @@ class DjendExecDeleteView(View):
         print e.delete()
         try:
             e.delete()
-            print "deleted"
             info(request.user.username, "Exec '%s' deleted" % e.exec_name)
         except Exception, e:
             error(request.user.username, "Error deleting(%s)" % e)
@@ -337,36 +355,6 @@ class DjendExecDeleteView(View):
     def dispatch(self, *args, **kwargs):
         return super(DjendExecDeleteView, self).dispatch(*args, **kwargs)
 
-##class DjendExecCloneView(View):
-#
-#    def post(self, request, *args, **kwargs):
-#        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
-#        clone_count = base.apys.filter(name__startswith="%s_clone" % kwargs['id']).count()
-#        created = False
-#        while not created:
-#            cloned_exec, created = Apy.objects.get_or_create(base=base, name="%s_clone_%s" % (kwargs['id'], str(clone_count+1)))
-#            clone_count+=1
-#
-#        cloned_exec.module = base.apys.get(name=kwargs['id']).module
-#        cloned_exec.save()
-#
-#
-#        response_data = {"redirect": request.META['HTTP_REFERER']}
-#        return HttpResponse(json.dumps(response_data), content_type="application/json")
-
-#    @csrf_exempt
-#    def dispatch(self, *args, **kwargs):
-#        return super(DjendExecCloneView, self).dispatch(*args, **kwargs) 
-
-#class DjendExecRenameView(View):
-#
-#    def post(self, request, *args, **kwargs):
-#        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
-#        exec_model = base.apys.get(name=kwargs['id'])
-#        exec_model.name = request.POST.get('new_name')
-#        exec_model.save()
-#        response_data = {"redirect": request.META['HTTP_REFERER']}
-#        return HttpResponse(json.dumps(response_data), content_type="application/json")
 
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
@@ -540,6 +528,7 @@ def dropbox_auth_finish(request):
 
 def login_or_sharedkey(function):
     def wrapper(request, *args, **kwargs):
+        logger.info("authenticate %s" % request.user)
         user=request.user
         # if logged in
         if user.is_authenticated():
@@ -554,7 +543,9 @@ def login_or_sharedkey(function):
         # if shared key in session and corresponds to base
         has_shared_key = request.session.__contains__('shared_key')
         if has_shared_key:
-            get_object_or_404(Base, name=base_name, uuid=request.session['shared_key'])
+            shared_key = request.session['shared_key']
+            logger.info("authenticate on base '%s' with shared_key '%s'" % (base, shared_key))
+            get_object_or_404(Base, name=base_name, uuid=shared_key)
             return function(request, *args, **kwargs)
         # don't redirect when access a exec withoud secret key
         if kwargs.has_key('id'):

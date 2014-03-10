@@ -123,10 +123,9 @@ window.app.controller('SettingsCtrl', ['$scope', '$http', '$base64', 'Settings',
     };
 
     $scope.delete = function() {
-      console.log(this.row);
       var index = this.row.rowIndex;
       $scope.gridOptions.selectItem(index, false);
-      removed = $scope.myData.splice(index, 1);
+      removed = $scope.myData.splice(index, 1)[0];
       Setting.delete({'baseId': window.active_base_id, 'id': removed.id});
     };
 }]);

@@ -20,6 +20,8 @@ class NotFound(Exception):
 class NoBasesFound(Exception):
     pass
 
+import logging
+logger = logging.getLogger(__name__)
 
 class Connection(object):
 
@@ -42,6 +44,7 @@ class Connection(object):
         return bases
 
     def get_file(self, path):
+        logger.info("get file %s" % path)
         return self._call('get_file', path).read()
 
     def put_file(self, path, content):
@@ -93,6 +96,7 @@ def channel_name_for_user(request):
         # TODO: find a way to identify anonymous user
         #     problem on initial
         channel_name = "anon-%s" % sign(request.META['REMOTE_ADDR'])
+    logger.debug("channel_name: %s" % channel_name)
     return channel_name
 
 
@@ -117,6 +121,7 @@ def user_message(level, username, message):
         class_level = "warn"        
     elif level == logging.ERROR:
         class_level = "error"        
+    logger.log(level, "to pusher: "+message)
 
     p[channel].trigger('console_msg', {'datetime': str(now), 'message': str(message), 'class': class_level})
 

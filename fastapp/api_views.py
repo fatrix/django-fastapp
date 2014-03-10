@@ -10,6 +10,9 @@ from fastapp.serializers import ApySerializer, BaseSerializer, SettingSerializer
 from rest_framework.decorators import link
 from rest_framework.response import Response
 
+import logging
+logger = logging.getLogger(__name__)
+
 class SettingViewSet(viewsets.ModelViewSet):
     model = Setting
     serializer_class = SettingSerializer

@@ -53,7 +53,7 @@ class ApiTestCase(BaseTestCase):
 		self.client1.login(username='user1', password='pass')
 		#response = self.client1.get(reverse('apy-list'))
 		response = self.client1.get("/fastapp/api/base/%s/apy/" % self.base1.id)
-		json_data = [{u'id': self.base1_apy1.id, u'name': u'base1_apy1'}]
+		json_data = [{u'id': 6, u'module': u'def func(self):\n    pass', u'name': u'base1_apy1'}]
 		self.assertEqual(200, response.status_code)
 		self.assertJSONEqual(response.content, json_data)
 
@@ -61,7 +61,7 @@ class ApiTestCase(BaseTestCase):
 		self.client1.login(username='user1', password='pass')
 		#response = self.client1.get(reverse('apy-list'))
 		response = self.client1.get("/fastapp/api/base/%s/apy/%s/" % (self.base1.id, self.base1_apy1.id))
-		json_data = {u'id': self.base1_apy1.id, u'name': u'base1_apy1'}
+		json_data = {u'id': 7, u'module': u'def func(self):\n    pass', u'name': u'base1_apy1'}
 		self.assertEqual(200, response.status_code)
 		self.assertJSONEqual(response.content, json_data)
 
@@ -70,7 +70,7 @@ class ApiTestCase(BaseTestCase):
 		response = self.client1.post("/fastapp/api/base/%s/apy/%s/clone/" % (self.base1.id, self.base1_apy1.id))
 		self.assertEqual(200, response.status_code)
 		#json_response = {"id": 2, "name": "1_clone_1"}
-		json_response = {u'id': 2, u'module': u'def func(self):\n    pass', u'name': u'1_clone_1'}
+		json_response = {u'id': 5, u'module': u'def func(self):\n    pass', u'name': u'4_clone_1'}
 		self.assertJSONEqual(response.content, json_response)
 
 		# delete
