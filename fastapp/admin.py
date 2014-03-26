@@ -1,10 +1,10 @@
 from django.contrib import admin
-from fastapp.models import Base, Exec
+from fastapp.models import Base, Apy
 
 class BaseAdmin(admin.ModelAdmin):
     pass
 admin.site.register(Base, BaseAdmin)
 
-class ExecAdmin(admin.ModelAdmin):
+class ApyAdmin(admin.ModelAdmin):
     pass
-admin.site.register(Exec, ExecAdmin)
+admin.site.register(Apy, ApyAdmin)

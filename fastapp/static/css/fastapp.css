@@ -57,7 +57,7 @@ div.rendered {
   background-color: #0B0719;
 }
 div.bases {
-	height: 120px;
+	height: 220px;
 	margin: 10px;
 }
 .highlight {
@@ -79,4 +79,7 @@ div.bases {
 }
 .light {
 	color: #787878;
+}
+.badge-error {
+	background-color: red;
 }

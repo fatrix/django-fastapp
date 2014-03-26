@@ -1,16 +1,27 @@
 import urllib
-from django.db import models
-from django.contrib.auth.models import User
-from django.template import Template
-from django_extensions.db.fields import UUIDField
-from django.db.models.signals import post_save, post_delete
-from django.dispatch import receiver
-from fastapp.utils import Connection, NotFound
 import ConfigParser
 import io
 import StringIO
 import gevent
 
+from django.db import models
+from django.contrib.auth.models import User
+from django.template import Template
+from django_extensions.db.fields import UUIDField
+from django.db.models.signals import post_save, post_delete, pre_save
+from django.dispatch import receiver
+from django.db.models import F
+from django.db.transaction import set_autocommit, commit, rollback, commit_on_success
+from fastapp.utils import Connection, NotFound
+
+
+import logging
+logger = logging.getLogger(__name__)
+
+index_template = """{% extends "fastapp/index.html" %}
+{% block content %}
+{% endblock %}
+"""
 
 class AuthProfile(models.Model):
     user = models.OneToOneField(User, related_name="authprofile")
@@ -20,7 +31,7 @@ class AuthProfile(models.Model):
 class Base(models.Model):
     name = models.CharField(max_length=32)
     uuid = UUIDField(auto=True)
-    content = models.CharField(max_length=8192, blank=True)
+    content = models.CharField(max_length=8192, blank=True, default=index_template)
     user = models.ForeignKey(User, related_name='+', default=0, blank=True)
     public = models.BooleanField(default=False)
 
@@ -35,7 +46,7 @@ class Base(models.Model):
     @property
     def config(self):
         config = ConfigParser.RawConfigParser()
-        for texec in self.execs.all():
+        for texec in self.apys.all():
             config.add_section(texec.name)
             config.set(texec.name, 'module', texec.name+".py")
             config.set(texec.name, 'description', "\"%s\"" % texec.description)
@@ -73,24 +84,22 @@ class Base(models.Model):
                 try:
                     module_content = connection.get_file("%s/%s" % (self.name, module_name))
                 except NotFound:
-                    print "DELETE %s" % module_name
                     try:
                         Exec.objects.get(name=module_name, base=self).delete()                    
                     except Exec.DoesNotExist, e:
                         self.save()
-                        print e
 
                 # save new exec
-                app_exec_model, created = Exec.objects.get_or_create(base=self, name=name)
+                app_exec_model, created = Apy.objects.get_or_create(base=self, name=name)
                 app_exec_model.module = module_content
                 app_exec_model.save()
                 
             # delete old exec
-            for local_exec in Exec.objects.filter(base=self).values('name'):
+            for local_exec in Apy.objects.filter(base=self).values('name'):
                 if local_exec['name'] in config.sections():
-                    print "exists"
+                    logger.warn()
                 else:
-                    Exec.objects.get(base=self, name=local_exec['name']).delete()
+                    Apy.objects.get(base=self, name=local_exec['name']).delete()
 
 
     def template(self, context):
@@ -100,11 +109,33 @@ class Base(models.Model):
     def __str__(self):
         return "<Base: %s>" % self.name
 
-class Exec(models.Model):
+MODULE_DEFAULT_CONTENT = """def func(self):\n    pass"""
+
+
+class Apy(models.Model):
     name = models.CharField(max_length=64)
-    module = models.CharField(max_length=8192)
-    base = models.ForeignKey(Base, related_name="execs", blank=True, null=True)
+    module = models.CharField(max_length=8192, default=MODULE_DEFAULT_CONTENT)
+    base = models.ForeignKey(Base, related_name="apys", blank=True, null=True)
     description = models.CharField(max_length=1024, blank=True, null=True)
+
+    def mark_executed(self):
+        commit_on_success()
+
+        self.counter.executed = F('executed')+1
+        self.counter.save()
+
+    def mark_failed(self):
+        self.counter.failed = F('failed')+1
+        self.counter.save()
+
+    def get_exec_url(self):
+        return "/fastapp/base/%s/exec/%s/?json=" % (self.base.name, self.name)
+
+class Counter(models.Model):
+    apy= models.OneToOneField(Apy, related_name="counter")
+    executed = models.IntegerField(default=0)
+    failed = models.IntegerField(default=0)
+
 
 class Setting(models.Model):
     base = models.ForeignKey(Base, related_name="setting")
@@ -121,17 +152,12 @@ def initialize_on_storage(sender, *args, **kwargs):
         connection = Connection(instance.user.authprofile.access_token)
         connection.create_folder("%s" % instance.name)
         connection.put_file("%s/app.config" % (instance.name), instance.config)
-        index_template = """
-        {% extends "fastapp/index.html" %}
-
-        {% block content %}
-        {% endblock %}
-        """
+        
         connection.put_file("%s/index.html" % (instance.name), index_template)
     except Exception, e:
-        print e
+        logger.exception("error in initialize_on_storage")
 
-@receiver(post_save, sender=Exec)
+@receiver(post_save, sender=Apy)
 def synchronize_to_storage(sender, *args, **kwargs):
     instance = kwargs['instance']
     try:
@@ -140,7 +166,16 @@ def synchronize_to_storage(sender, *args, **kwargs):
         if kwargs.get('created'):
             gevent.spawn(connection.put_file("%s/app.config" % (instance.base.name), instance.base.config))
     except Exception, e:
-        print e
+        logger.exception("error in synchronize_to_storage")
+
+    print args
+    print kwargs
+
+    if kwargs.get('created'):
+        counter = Counter(apy=instance)
+        counter.save()
+        print Counter.objects.all()
+
 
 @receiver(post_save, sender=Base)
 def synchronize_base_to_storage(sender, *args, **kwargs):
@@ -149,26 +184,27 @@ def synchronize_base_to_storage(sender, *args, **kwargs):
         connection = Connection(instance.user.authprofile.access_token)
         gevent.spawn(connection.put_file("%s/index.html" % instance.name, instance.content))
     except Exception, e:
-        print e
+        logger.exception("error in synchronize_base_to_storage")
 
 @receiver(post_delete, sender=Base)
 def base_to_storage_on_delete(sender, *args, **kwargs):
     instance = kwargs['instance']
     connection = Connection(instance.user.authprofile.access_token)
     try:
-        connection.delete_file("%s" % instance.name)
+        gevent.spawn(connection.delete_file("%s" % instance.name))
     except Exception, e:
-        print e
+        logger.exception("error in base_to_storage_on_delete")
 
-@receiver(post_delete, sender=Exec)
+@receiver(post_delete, sender=Apy)
 def synchronize_to_storage_on_delete(sender, *args, **kwargs):
     instance = kwargs['instance']
     try:
         connection = Connection(instance.base.user.authprofile.access_token)
-        connection.put_file("%s/app.config" % (instance.base.name), instance.base.config)
-        connection.delete_file("%s/%s.py" % (instance.base.name, instance.name))
+        gevent.spawn(connection.put_file("%s/app.config" % (instance.base.name), instance.base.config))
+        gevent.spawn(connection.delete_file("%s/%s.py" % (instance.base.name, instance.name)))
     except NotFound, e:
-        print e
+        logger.exception("error in synchronize_to_storage_on_delete")
     except Base.DoesNotExist, e:
         # if post_delete is triggered from base.delete()
         pass
+
