@@ -5,7 +5,7 @@
 };*/
 
 // initialize Pusher listener
-var pusher = new Pusher(window.pusher_key);
+/*var pusher = new Pusher(window.pusher_key);
 var channel = pusher.subscribe(window.channel);
 channel.bind('console_msg', function(data) {
     data.source = "Server";
@@ -14,8 +14,9 @@ channel.bind('console_msg', function(data) {
 channel.bind('pusher:subscription_succeeded', function() {
     add_client_message("Subscription succeeded.");
 });
+*/
 
-function add_client_message(message) {
+/*function add_client_message(message) {
     data = {};
     data.message = message;
     var now = NDateTime.Now();
@@ -28,7 +29,7 @@ function add_client_message(message) {
 function add_message(data) {
     $("div#messages").prepend("<p class='"+data.class+"'>"+data.datetime+" : "+data.source+" : "+data.message+"</p>");
     $("div#messages p").slice(7).remove();
-}
+}*/
 
 function redirect(location) {
     window.location = location;

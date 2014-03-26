@@ -1,10 +1,22 @@
 from rest_framework import serializers
-from fastapp.models import Base, Apy, Setting
+from fastapp.models import Base, Apy, Setting, Counter
+
+class CounterSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Counter
+        fields = ('executed', 'failed')
 
 class ApySerializer(serializers.ModelSerializer):
+    counter = CounterSerializer(many=False, read_only=True)
+
     class Meta:
         model = Apy
-        fields = ('id', 'name', 'module')
+        fields = ('id', 'name', 'module', 'counter')
+        #fields = ('id', 'name', 'module' )
+
+    #def get_counter(self, obj):
+    #    return obj.counter.executed
 
 class SettingSerializer(serializers.ModelSerializer):
     class Meta:

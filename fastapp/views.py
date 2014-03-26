@@ -20,13 +20,14 @@ from django.views.generic.base import ContextMixin
 from django.conf import settings
 from django.views.generic import TemplateView
 from django.views.decorators.cache import never_cache
+from django.db.models import F
 from dropbox.rest import ErrorResponse
 from fastapp.utils import message
 from fastapp import __version__ as version
 
 from utils import UnAuthorized, Connection, NoBasesFound
-from utils import info, error, warn, channel_name_for_user, debug
-from fastapp.models import AuthProfile, Base, Apy, Setting
+from utils import info, error, warn, channel_name_for_user, debug, send_client
+from fastapp.models import AuthProfile, Base, Apy, Setting, Counter
 
 from django.views.decorators.cache import never_cache
 from django.core.cache import cache
@@ -97,6 +98,7 @@ class DjendExecView(View, DjendMixin):
         exception = None;  returned = None
         status = self.STATE_OK
 
+        #import pdb; pdb.set_trace()
         func = None 
 
         request = do_kwargs['request']
@@ -145,6 +147,7 @@ class DjendExecView(View, DjendMixin):
             func.settings = setting_dict1
 
             returned = func(func)
+
         except Exception, e:
             exception = "%s: %s" % (type(e).__name__, e.message)
             traceback.print_exc()
@@ -165,6 +168,8 @@ class DjendExecView(View, DjendMixin):
         try:
             data = self._do(exec_model.module, do_kwargs)
         except Exception, e:
+            logger.exception(e)
+            exec_model.mark_failed()
             error(channel_name_for_user(request), e.msg)
             return HttpResponseServerError(e.msg)
 
@@ -176,8 +181,23 @@ class DjendExecView(View, DjendMixin):
             user = channel_name_for_user(request)
             if data["status"] == "OK":
                 info(user, str(data))
+                exec_model.mark_executed()
             elif data["status"] == "NOK":
                 error(user, str(data))
+                exec_model.mark_failed()
+
+            # send counter to client
+            cdata = {
+                'counter': 
+                    {'executed': str(Apy.objects.get(id=exec_model.id).counter.executed), 
+                        'failed': str(Apy.objects.get(id=exec_model.id).counter.failed)
+                    },
+                'apy_id': exec_model.id 
+            }
+            print exec_model.counter.failed
+            print cdata
+            send_client(request, "counter", cdata)
+
 
             # the exec can return an HttpResponseRedirect object, where we redirect
             if isinstance(data['returned'], HttpResponseRedirect):
@@ -189,6 +209,7 @@ class DjendExecView(View, DjendMixin):
                     data = '%s(%s);' % (request.REQUEST['callback'], json.dumps(data))
                     return HttpResponse(data, "application/javascript")
                 return HttpResponse(json.dumps(data), content_type="application/json")
+
 
         return HttpResponse(data['returned'])
 

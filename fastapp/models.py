@@ -8,8 +8,10 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.template import Template
 from django_extensions.db.fields import UUIDField
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
+from django.db.models import F
+from django.db.transaction import set_autocommit, commit, rollback, commit_on_success
 from fastapp.utils import Connection, NotFound
 
 
@@ -109,11 +111,31 @@ class Base(models.Model):
 
 MODULE_DEFAULT_CONTENT = """def func(self):\n    pass"""
 
+
 class Apy(models.Model):
     name = models.CharField(max_length=64)
     module = models.CharField(max_length=8192, default=MODULE_DEFAULT_CONTENT)
     base = models.ForeignKey(Base, related_name="apys", blank=True, null=True)
     description = models.CharField(max_length=1024, blank=True, null=True)
+
+    def mark_executed(self):
+        commit_on_success()
+
+        self.counter.executed = F('executed')+1
+        self.counter.save()
+
+    def mark_failed(self):
+        self.counter.failed = F('failed')+1
+        self.counter.save()
+
+    def get_exec_url(self):
+        return "/fastapp/base/%s/exec/%s/?json=" % (self.base.name, self.name)
+
+class Counter(models.Model):
+    apy= models.OneToOneField(Apy, related_name="counter")
+    executed = models.IntegerField(default=0)
+    failed = models.IntegerField(default=0)
+
 
 class Setting(models.Model):
     base = models.ForeignKey(Base, related_name="setting")
@@ -146,6 +168,15 @@ def synchronize_to_storage(sender, *args, **kwargs):
     except Exception, e:
         logger.exception("error in synchronize_to_storage")
 
+    print args
+    print kwargs
+
+    if kwargs.get('created'):
+        counter = Counter(apy=instance)
+        counter.save()
+        print Counter.objects.all()
+
+
 @receiver(post_save, sender=Base)
 def synchronize_base_to_storage(sender, *args, **kwargs):
     instance = kwargs['instance']
@@ -176,3 +207,4 @@ def synchronize_to_storage_on_delete(sender, *args, **kwargs):
     except Base.DoesNotExist, e:
         # if post_delete is triggered from base.delete()
         pass
+

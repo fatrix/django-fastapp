@@ -2,7 +2,7 @@ from django.test import TransactionTestCase, TestCase, Client
 from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 
-from fastapp.models import Base, Apy
+from fastapp.models import Base, Apy, Counter
 import json
 
 class BaseTestCase(TransactionTestCase):
@@ -13,6 +13,7 @@ class BaseTestCase(TransactionTestCase):
 		self.user2.save()
 		self.base1 = Base.objects.create(name="base1", user=self.user1)
 		self.base1_apy1 = Apy.objects.create(name="base1_apy1", base=self.base1)
+		self.base1_apy1.save()
 
 		self.client1 = Client()  # logged in with objects
 		self.client2 = Client()  # logged in without objects
@@ -77,6 +78,20 @@ class ApiTestCase(BaseTestCase):
 		response = self.client1.delete("/fastapp/api/base/%s/apy/%s/" % (self.base1.id, json_response['id']))
 		self.assertEqual(204, response.status_code)
 
+class ApyExecutionTestCase(BaseTestCase):
+
+	def test_execute_apy_logged_in(self):
+		self.client1.login(username='user1', password='pass')
+		response = self.client1.get(self.base1_apy1.get_exec_url())
+		self.assertEqual(200, response.status_code)
+		self.assertEqual(response.content, '{"status": "OK", "exception": null, "returned": null, "id": "base1_apy1"}')
+
+	def test_execute_apy_with_shared_key(self):
+		url = self.base1_apy1.get_exec_url()+"&shared_key=%s" % (self.base1.uuid)
+		response = self.client3.get(url)
+		self.assertEqual(200, response.status_code)
+		self.assertEqual(response.content, '{"status": "OK", "exception": null, "returned": null, "id": "base1_apy1"}')
+
 class SettingTestCase(BaseTestCase):
 	def test_create_and_change_setting_for_base(self):
 		self.client1.login(username='user1', password='pass')
@@ -99,3 +114,12 @@ class SettingTestCase(BaseTestCase):
 		response = self.client1.delete("/fastapp/api/base/%s/setting/%s/" % (self.base1.id, setting_id), content_type="application/json")
 		self.assertEqual(204, response.status_code)
 
+class CounterTestCase(BaseTestCase):
+	def test_create_counter_on_apy_save(self):
+		#counter = Counter(apy=self.base1_apy1)
+		#counter.save()
+		self.assertEqual(Apy.objects.get(id=self.base1_apy1.id).counter.executed, 0)
+		self.base1_apy1.mark_executed()
+		self.assertEqual(Apy.objects.get(id=self.base1_apy1.id).counter.executed, 1)
+		self.base1_apy1.mark_failed()
+		self.assertEqual(Apy.objects.get(id=self.base1_apy1.id).counter.failed, 1)

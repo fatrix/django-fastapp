@@ -1,4 +1,27 @@
-window.app = angular.module('execApp', ['ngGrid', 'base64', 'ngResource', 'baseServices']);
+function add_client_message(message) {
+    data = {};
+    data.message = message;
+    var now = NDateTime.Now();
+    data.datetime = now.ToString("yyyy-MM-dd HH:mm:ss.ffffff");
+    data.class = "info";
+    data.source = "Client";
+    add_message(data);
+}
+
+function add_message(data) {
+    $("div#messages").prepend("<p class='"+data.class+"'>"+data.datetime+" : "+data.source+" : "+data.message+"</p>");
+    $("div#messages p").slice(7).remove();
+}
+
+
+window.app = angular.module('execApp', ['ngGrid', 'base64', 'ngResource', 'baseServices', 'doowb.angular-pusher']).
+config(['PusherServiceProvider',
+  function(PusherServiceProvider) {
+    PusherServiceProvider
+      .setToken(window.pusher_key)
+      .setOptions({encrypted: true});
+  }
+]);
 
 window.app.controller('BasesCtrl', ['$scope', 'Bases', 'Apy', function($scope, Bases, Apy) {
   $scope.init = function() {
@@ -12,7 +35,7 @@ window.app.controller('BasesCtrl', ['$scope', 'Bases', 'Apy', function($scope, B
 }]);
 
 
-window.app.controller('ExecCtrl', ['$scope', '$http', '$base64', 'Apy', 'Apy1', function($scope, $http, $base64, Apy, Apy1) {
+window.app.controller('ExecCtrl', ['$scope', '$http', '$base64', 'Apy', 'Apy1', 'Pusher', function($scope, $http, $base64, Apy, Apy1, Pusher) {
   $scope.new_exec_name = "";
   $scope.apys = [];
 
@@ -22,14 +45,33 @@ window.app.controller('ExecCtrl', ['$scope', '$http', '$base64', 'Apy', 'Apy1', 
       counter=0;
 
       $scope.apys.map(function(apy) {
-        console.log(counter);
         $scope.$watch(apy, function(changed) {
           console.log("changed");
         }, true);
         counter++;
       });
     });
-  };
+
+    // setup pusher for listening to counter events
+    Pusher.subscribe(window.channel, "counter", function (item) {
+      console.log(item);
+      $scope.apys.map(function(apy) {
+          if (apy.id == item['apy_id']) { apy.counter = item['counter']; }
+      });
+    });
+
+    Pusher.subscribe(window.channel, 'pusher:subscription_succeeded', function(members) {
+        console.log("subscription_succeeded");
+        console.log(members);
+        add_client_message("Subscription succeeded.");
+      });
+    };
+
+    Pusher.subscribe(window.channel, 'console_msg', function(data) {
+          data.source = "Server";
+          add_message(data);
+    });
+
 
   $scope.create = function() {
     Apy.create({'baseId': window.active_base_id}, {'name': $scope.new_exec_name}, function(apy) {
@@ -72,6 +114,7 @@ window.app.controller('ExecCtrl', ['$scope', '$http', '$base64', 'Apy', 'Apy1', 
     //  this.show = false;
     //});
   };
+
 
   /*$scope.$watch('apy.module', function(oldVal,newVal){
     console.log(oldVal);

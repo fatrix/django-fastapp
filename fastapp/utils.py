@@ -99,6 +99,23 @@ def channel_name_for_user(request):
     logger.debug("channel_name: %s" % channel_name)
     return channel_name
 
+def channel_name_for_user_by_user(user):
+    channel_name = "%s-%s" % (user.username, sign(user.username))
+    logger.debug("channel_name: %s" % channel_name)
+    return channel_name
+
+def send_client(request, event, data):
+    channel = channel_name_for_user(request)
+    p = get_pusher()
+    p[channel].trigger(event, data)
+
+def get_pusher():
+    p = pusher.Pusher(
+      app_id=settings.PUSHER_APP_ID,
+      key=settings.PUSHER_KEY,
+      secret=settings.PUSHER_SECRET
+    )
+    return p
 
 def user_message(level, username, message):
 
@@ -106,11 +123,7 @@ def user_message(level, username, message):
     # TODO: strip message to max 10KB
     # http://pusher.com/docs/server_api_guide/server_publishing_events
 
-    p = pusher.Pusher(
-      app_id=settings.PUSHER_APP_ID,
-      key=settings.PUSHER_KEY,
-      secret=settings.PUSHER_SECRET
-    )
+    p = get_pusher()
 
     now = datetime.datetime.now()
     if level == logging.INFO:

@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 
 from fastapp.models import Base, Apy, Setting
 from fastapp.serializers import ApySerializer, BaseSerializer, SettingSerializer
+from fastapp.utils import info, error, warn
 from rest_framework.decorators import link
 from rest_framework.response import Response
 
@@ -29,6 +30,7 @@ class ApyViewSet(viewsets.ModelViewSet):
     model = Apy
     serializer_class = ApySerializer
     renderer_classes = [JSONRenderer, JSONPRenderer]
+    permission_classes = (permissions.IsAuthenticated,)
 
     def get_queryset(self):
         base_pk = self.kwargs['base_pk']
@@ -36,6 +38,11 @@ class ApyViewSet(viewsets.ModelViewSet):
 
     def pre_save(self, obj):
         obj.base = Base.objects.get(id=self.kwargs['base_pk'], user=self.request.user)
+
+    def post_save(self, obj, created=False):
+        print "SAVE"
+        print self.request.user.username
+        info(self.request.user.username, "Apy saved")
 
     def clone(self, request, base_pk, pk):
         base = get_object_or_404(Base, id=base_pk, user=User.objects.get(username=request.user.username))

@@ -80,3 +80,6 @@ div.bases {
 .light {
 	color: #787878;
 }
+.badge-error {
+	background-color: red;
+}
