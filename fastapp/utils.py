@@ -1,13 +1,14 @@
 import datetime
 import logging
 import dropbox
-import pusher
+import json
 import StringIO
 import hashlib
 from django.contrib import messages
 from django.conf import settings
 from dropbox.rest import ErrorResponse
 
+import pika
 
 class UnAuthorized(Exception):
     pass
@@ -20,8 +21,11 @@ class NotFound(Exception):
 class NoBasesFound(Exception):
     pass
 
-import logging
 logger = logging.getLogger(__name__)
+
+
+
+
 
 class Connection(object):
 
@@ -62,7 +66,6 @@ class Connection(object):
             m = getattr(self.client, ms)
             return m(*args)
         except ErrorResponse, e:
-            print e.__dict__['status']
             if e.__dict__['status'] == 401:
                 raise UnAuthorized(e.__dict__['body']['error'])
             if e.__dict__['status'] == 404:
@@ -104,26 +107,56 @@ def channel_name_for_user_by_user(user):
     logger.debug("channel_name: %s" % channel_name)
     return channel_name
 
-def send_client(request, event, data):
-    channel = channel_name_for_user(request)
-    p = get_pusher()
-    p[channel].trigger(event, data)
+def connect_to_queue(queue):
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+        channel = connection.channel()
+        d = channel.queue_declare(queue)
+        if d.method.__dict__['consumer_count']:
+            logger.error("No consumer on queue %s" % queue)
+    except pika.exceptions.AMQPConnectionException, e:
+        print e
+    return channel
 
+def send_client(channel_name, event, data):
+    logger.info("START EVENT_TO_QUEUE %s" % event)
+
+    channel = connect_to_queue('pusher_events')
+    #channel = pusher
+
+    payload = {
+        'channel': channel_name, 
+        'event': event, 
+        'data': data, 
+    }
+
+    channel.basic_publish(exchange='',
+                          routing_key='pusher_events',
+                          body=json.dumps(payload),
+                          properties=pika.BasicProperties(
+                            delivery_mode=1,
+                         ),
+                        )
+    channel.basic_ack()
+    logger.info("END EVENT_TO_QUEUE %s" % event)
+
+
+import fastapp 
 def get_pusher():
-    p = pusher.Pusher(
-      app_id=settings.PUSHER_APP_ID,
-      key=settings.PUSHER_KEY,
-      secret=settings.PUSHER_SECRET
-    )
-    return p
+    #p = pusher.Pusher(
+    #  app_id=settings.PUSHER_APP_ID,
+    #  key=settings.PUSHER_KEY,
+    #  secret=settings.PUSHER_SECRET
+    #)
+    return fastapp.pusher_instance
 
-def user_message(level, username, message):
+def user_message(level, channel_name, message):
 
-    channel = username
+    #channel = username
     # TODO: strip message to max 10KB
     # http://pusher.com/docs/server_api_guide/server_publishing_events
 
-    p = get_pusher()
+    #p = get_pusher()
 
     now = datetime.datetime.now()
     if level == logging.INFO:
@@ -135,8 +168,9 @@ def user_message(level, username, message):
     elif level == logging.ERROR:
         class_level = "error"        
     logger.log(level, "to pusher: "+message)
+    data = {'datetime': str(now), 'message': str(message), 'class': class_level}
+    send_client(channel_name, "console_msg", data)
 
-    p[channel].trigger('console_msg', {'datetime': str(now), 'message': str(message), 'class': class_level})
 
 def info(username, gmessage): 
         return user_message(logging.INFO, username, gmessage)
@@ -146,3 +180,32 @@ def error(username, gmessage):
         return user_message(logging.ERROR, username, gmessage)
 def warn(username, gmessage): 
         return user_message(logging.WARN, username, gmessage)
+
+def send_to_pusher(ch, method, props, body):
+    p = get_pusher()    
+    body = json.loads(body)
+
+    event = body['event']
+    channel = body['channel']
+    data = body['data']
+
+    p[channel].trigger(event, data)
+    ch.basic_ack(delivery_tag = method.delivery_tag)
+
+def consume():
+    logger.info("Start consuming on pusher_events")
+    channel = connect_to_queue('pusher_events')
+    channel.basic_consume(send_to_pusher, queue='pusher_events')
+    channel.basic_ack()
+
+def start_sender():
+    from threading import Thread
+    logger.info("Start thread for consume")
+    t = Thread(target=consume)
+    t.daemon = True
+    t.start()
+
+import sys
+if any(arg.startswith('run') for arg in sys.argv):
+    logger.info("Start sending events to pusher")
+    start_sender()

@@ -1,7 +1,7 @@
 from django.conf.urls import patterns, url
 from django.contrib.auth.decorators import login_required
 from django.conf.urls import include
-from fastapp.views import DjendBaseView, DjendBaseSaveView, DjendBaseDeleteView, DjendExecSaveView, \
+from fastapp.views import DjendBaseView, DjendBaseSaveView, DjendBaseDeleteView, \
                 DjendBaseCreateView, DjendExecDeleteView, DjendExecView, DjendStaticView, \
                 login_or_sharedkey, dropbox_auth_finish, dropbox_auth_start, DjendView, \
                 DjendBaseSettingsView, DjendBaseRenameView

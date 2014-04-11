@@ -3,16 +3,20 @@ import ConfigParser
 import io
 import StringIO
 import gevent
+import json
 
 from django.db import models
 from django.contrib.auth.models import User
 from django.template import Template
 from django_extensions.db.fields import UUIDField
-from django.db.models.signals import post_save, post_delete, pre_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import F
-from django.db.transaction import set_autocommit, commit, rollback, commit_on_success
+from django.db.transaction import commit_on_success
 from fastapp.utils import Connection, NotFound
+from fastapp.executors.remote import distribute, CONFIGURATION_QUEUE, SETTING_QUEUE
+
+from django.core import serializers
 
 
 import logging
@@ -143,7 +147,6 @@ class Setting(models.Model):
     value = models.CharField(max_length=8192)
 
 
-
 @receiver(post_save, sender=Base)
 def initialize_on_storage(sender, *args, **kwargs):
     instance = kwargs['instance']
@@ -168,14 +171,19 @@ def synchronize_to_storage(sender, *args, **kwargs):
     except Exception, e:
         logger.exception("error in synchronize_to_storage")
 
-    print args
-    print kwargs
-
     if kwargs.get('created'):
         counter = Counter(apy=instance)
         counter.save()
-        print Counter.objects.all()
 
+    distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]))
+
+@receiver(post_save, sender=Setting)
+def send_to_workers(sender, *args, **kwargs):
+    instance = kwargs['instance']
+    distribute(SETTING_QUEUE, json.dumps({
+        instance.key: instance.value
+        })
+    )
 
 @receiver(post_save, sender=Base)
 def synchronize_base_to_storage(sender, *args, **kwargs):
