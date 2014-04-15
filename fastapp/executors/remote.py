@@ -5,7 +5,10 @@ import copy
 import logging
 import threading
 import traceback
+import time
 from bunch import Bunch
+from django.core import serializers
+#from fastapp.models import Apy
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,7 @@ def distribute(event, apy):
 
 
         def call(self, body):
+            #import pdb; pdb.set_trace()
             self.channel.basic_publish(exchange=event,
                                        routing_key='',
                                        body=body)
@@ -107,6 +111,7 @@ threads = []
 CONFIGURATION_QUEUE = "configuration"
 SETTING_QUEUE = "setting"
 RPC_QUEUE = "rpc_queue"
+HEARTBEAT_QUEUE = "heartbeat_queue"
 
 class ExecutorServerThread(threading.Thread):
     def __init__(self, threadID, name, counter):
@@ -152,15 +157,17 @@ class ExecutorServerThread(threading.Thread):
         def on_configuration_request(ch, method, props, body):
             fields = json.loads(body)[0]['fields']
             #exec fields['module'] in globals(), locals()
-            import datetime
             #exec fields['module'] in globals(), globals()
             #exec fields['module'] in globals(), locals()
-            exec fields['module'] in globals(), locals()
-            self.functions.update({
-                fields['name']: func,
-                })
-            #print "Configuration '%s' received in %s" % (fields['name'], self.name)
-            logger.info("Configuration '%s' received in %s" % (fields['name'], self.name))
+            try:
+                exec fields['module'] in globals(), locals()
+                self.functions.update({
+                    fields['name']: func,
+                    })
+                #print "Configuration '%s' received in %s" % (fields['name'], self.name)
+                logger.info("Configuration '%s' received in %s" % (fields['name'], self.name))
+            except Exception, e:
+                logger.exception(e)
 
         def on_setting_request(ch, method, props, body):
             json_body = json.loads(body)
@@ -194,6 +201,84 @@ class ExecutorServerThread(threading.Thread):
         channel.basic_consume(on_setting_request, queue=self.setting_queue_name, no_ack=True)
 
         logger.info("Waiting for events")
+        channel.start_consuming()
+
+class HeartbeatThread(threading.Thread):
+
+    def __init__(self, threadID, name, counter, receiver=False):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.counter = counter
+        self.receiver = receiver
+
+        self.in_sync = False
+
+    def run(self):
+        print "Starting " + self.name
+        if self.receiver:
+            self.listen()
+        else:
+            self.beat()
+
+    def beat(self):
+        # open connection and channel
+        connection = pika.BlockingConnection(pika.ConnectionParameters(
+                host='localhost'))
+        self.channel = connection.channel()
+        self.channel.queue_declare(queue=HEARTBEAT_QUEUE)
+
+        while True:
+            logger.info("Heartbeat")
+            self.channel.basic_publish(exchange='',
+                    routing_key=b'heartbeat_queue',
+                    properties=pika.BasicProperties(
+                        delivery_mode=1,
+                        #reply_to = self.callback_queue,
+                        #correlation_id = self.corr_id,
+                    ),
+                    body=json.dumps({
+                        'in_sync': self.in_sync 
+                        }))
+            self.in_sync = True
+            time.sleep(10)
+
+        #fields = json.loads(body)[0]['fields']
+        #exec fields['module'] in globals(), locals()
+        #exec fields['module'] in globals(), globals()
+        #exec fields['module'] in globals(), locals()
+        #exec fields['module'] in globals(), locals()
+        #self.functions.update({
+        #    fields['name']: func,
+        #    })
+        #print "Configur
+
+
+    def listen(self):
+        def on_beat(ch, method, props, body):
+            logger.info("heartbeat received")
+            if not (json.loads(body)['in_sync']):
+                logger.info("run sync")
+                from fastapp.models import Apy, Setting
+                for instance in Apy.objects.all():
+                    #print instance, CONFIGURATION_QUEUE
+                    distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]))
+
+                for instance in Setting.objects.all():
+                    distribute(SETTING_QUEUE, json.dumps({
+                        instance.key: instance.value
+                        })
+                    )
+
+            #ch.basic_ack(delivery_tag = method.delivery_tag)
+
+        # open connection and channel
+        #while True:
+        logger.info("start listening for heartbeats")
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+        channel = connection.channel()
+        channel.queue_declare(queue=HEARTBEAT_QUEUE)
+        channel.basic_consume(on_beat, queue=b'heartbeat_queue', no_ack=True)
         channel.start_consuming()
 
 class ApyNotFound(Exception):

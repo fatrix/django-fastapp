@@ -97,65 +97,65 @@ class DjendExecView(View, DjendMixin):
     STATE_TIMEOUT = "TIMEOUT"
 
 
-    def _do(self, sfunc, do_kwargs):
-        exception = None;  returned = None
-        status = self.STATE_OK
-
-        func = None 
-
-        request = do_kwargs['request']
-        logger.info("do %s %s" % request.method, request.path_info)
-        username = copy.copy(do_kwargs['request'].user.username)
-
-        # debug incoming request
-        if request.method == "GET":
-            query_string = copy.copy(request.GET)
-        else:
-            query_string = copy.copy(request.POST)
-        try:
-            query_string.pop('json')
-        except KeyError, e:
-            logger.exception("invalid request")
-
-        user = channel_name_for_user(request)
-        debug(user, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
-
-        try:
-
-            exec sfunc
-            func.username=username
-            func.channel=channel_name_for_user(request)
-            func.request=do_kwargs['request']
-            func.session=do_kwargs['request'].session
-
-            func.name = do_kwargs['exec_name']
-
-            # attach GET and POST data
-            func.GET=copy.deepcopy(request.GET)
-            func.POST=copy.deepcopy(request.POST)
-
-            # attach log functions
-            func.info=info
-            func.debug=debug
-            func.warn=warn
-            func.error=error
-
-            # attatch settings
-            setting_dict = do_kwargs['base_model'].setting.all().values('key', 'value')
-            setting_dict1 = Bunch()
-            for setting in setting_dict:
-                setting_dict1.update({setting['key']: setting['value']})
-            setting_dict1.update({'STATIC_DIR': "/%s/%s/static" % ("fastapp", do_kwargs['base_model'].name)})
-            func.settings = setting_dict1
-
-            returned = func(func)
-
-
-        except Exception, e:
-            exception = "%s: %s" % (type(e).__name__, e.message)
-            traceback.print_exc()
-            status = self.STATE_NOK
-        return {"status": status, "returned": returned, "exception": exception}
+#    def _do(self, sfunc, do_kwargs):
+#        exception = None;  returned = None
+#        status = self.STATE_OK
+#
+#        func = None 
+#
+#        request = do_kwargs['request']
+#        logger.info("do %s %s" % request.method, request.path_info)
+#        username = copy.copy(do_kwargs['request'].user.username)
+#
+#        # debug incoming request
+#        if request.method == "GET":
+#            query_string = copy.copy(request.GET)
+#        else:
+#            query_string = copy.copy(request.POST)
+#        try:
+#            query_string.pop('json')
+#        except KeyError, e:
+#            logger.exception("invalid request")
+#
+#        user = channel_name_for_user(request)
+#        debug(user, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
+#
+#        try:
+#
+#            exec sfunc
+#            func.username=username
+#            func.channel=channel_name_for_user(request)
+#            func.request=do_kwargs['request']
+#            func.session=do_kwargs['request'].session
+#
+#            func.name = do_kwargs['exec_name']
+#
+#            # attach GET and POST data
+#            func.GET=copy.deepcopy(request.GET)
+#            func.POST=copy.deepcopy(request.POST)
+#
+#            # attach log functions
+#            func.info=info
+#            func.debug=debug
+#            func.warn=warn
+#            func.error=error
+#
+#            # attatch settings
+#            setting_dict = do_kwargs['base_model'].setting.all().values('key', 'value')
+#            setting_dict1 = Bunch()
+#            for setting in setting_dict:
+#                setting_dict1.update({setting['key']: setting['value']})
+#            setting_dict1.update({'STATIC_DIR': "/%s/%s/static" % ("fastapp", do_kwargs['base_model'].name)})
+#            func.settings = setting_dict1
+#
+#            returned = func(func)
+#
+#
+#        except Exception, e:
+#            exception = "%s: %s" % (type(e).__name__, e.message)
+#            traceback.print_exc()
+#            status = self.STATE_NOK
+#        return {"status": status, "returned": returned, "exception": exception}
 
     def get(self, request, *args, **kwargs):
         # get base
@@ -202,10 +202,12 @@ class DjendExecView(View, DjendMixin):
                 }
             })
         try:
+            # _do on remote
             start = int(round(time.time() * 1000))
             response_data = call_rpc_client(json.dumps(rpc_request_data))
             end = int(round(time.time() * 1000))
             ms=str(end-start)
+
             logger.info("RESPONSE-time: %sms" %  str(ms))
             logger.debug("RESPONSE-data: %s" % response_data[:120])
             #print response_data

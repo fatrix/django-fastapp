@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 import logging
 import sys
 
-from fastapp.executors.remote import ExecutorServerThread, HeartbeatThread
+from fastapp.executors.remote import HeartbeatThread
 
 logger = logging.getLogger("fastapp.executors.remote")
 
@@ -15,17 +15,17 @@ class Command(BaseCommand):
         THREAD_COUNT = 10
         threads = []
         for c in range(1, THREAD_COUNT):
-                thread = ExecutorServerThread(c, "ExecutorServerThread-%s" % c, c)
-                self.stdout.write('Start ExecutorServerThread')
+                #thread = ExecutorServerThread(c, "ExecutorServerThread-%s" % c, c)
+                #self.stdout.write('Start ExecutorServerThread')
+                #threads.append(thread)
+                #thread.daemon = True
+                #thread.start()
+
+                thread = HeartbeatThread(c, "HeartbeatServerThread-%s" % c, c, receiver=True)
+                self.stdout.write('Start HeartbeatServerThread')
                 threads.append(thread)
                 thread.daemon = True
                 thread.start()
-
-        thread = HeartbeatThread(c, "HeartbeatServerThread-%s" % c, c)
-        self.stdout.write('Start HeartbeatServerThread')
-        threads.append(thread)
-        thread.daemon = True
-        thread.start()
 
         for t in threads:
             #print "join %s " % t

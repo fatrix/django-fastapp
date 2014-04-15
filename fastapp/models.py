@@ -146,6 +146,17 @@ class Setting(models.Model):
     key = models.CharField(max_length=128)
     value = models.CharField(max_length=8192)
 
+class Instance(models.Model):
+    is_alive = models.BooleanField(default=False)
+    executor = models.ForeignKey("Executor", related_name="instances")
+
+class Host(models.Model):
+    name = models.CharField(max_length=50)
+
+class Executor(models.Model):
+    user = models.ForeignKey(User, related_name="executor")
+    num_instances = 1
+    host = models.ForeignKey(Host)
 
 @receiver(post_save, sender=Base)
 def initialize_on_storage(sender, *args, **kwargs):

@@ -4,27 +4,22 @@ import dropbox
 import json
 import StringIO
 import hashlib
+import pika
 from django.contrib import messages
 from django.conf import settings
 from dropbox.rest import ErrorResponse
 
-import pika
 
 class UnAuthorized(Exception):
     pass
 
-
 class NotFound(Exception):
     pass
-
 
 class NoBasesFound(Exception):
     pass
 
 logger = logging.getLogger(__name__)
-
-
-
 
 
 class Connection(object):
@@ -108,14 +103,17 @@ def channel_name_for_user_by_user(user):
     return channel_name
 
 def connect_to_queue(queue):
+    logger.info("Connect to %s" % queue)
     try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost', heartbeat_interval=20))
         channel = connection.channel()
+        #d = channel.queue_declare(queue, durable=True)
         d = channel.queue_declare(queue)
+        logger.info(d.method)
         if d.method.__dict__['consumer_count']:
             logger.error("No consumer on queue %s" % queue)
     except pika.exceptions.AMQPConnectionException, e:
-        print e
+        logger.exception(e)
     return channel
 
 def send_client(channel_name, event, data):
@@ -192,20 +190,33 @@ def send_to_pusher(ch, method, props, body):
     p[channel].trigger(event, data)
     ch.basic_ack(delivery_tag = method.delivery_tag)
 
-def consume():
+def consume(channel):
     logger.info("Start consuming on pusher_events")
-    channel = connect_to_queue('pusher_events')
+    #channel = connect_to_queue('pusher_events')
+    channel.basic_qos(prefetch_count=1) 
     channel.basic_consume(send_to_pusher, queue='pusher_events')
+    channel.start_consuming()
     channel.basic_ack()
 
 def start_sender():
+    channel = connect_to_queue('pusher_events')
     from threading import Thread
     logger.info("Start thread for consume")
-    t = Thread(target=consume)
+    t = Thread(target=consume, args=(channel,))
     t.daemon = True
     t.start()
+    return t
 
 import sys
 if any(arg.startswith('run') for arg in sys.argv):
+    # create connection to pusher_queue
+    #
     logger.info("Start sending events to pusher")
-    start_sender()
+    t1 = start_sender()
+    #thread = HeartbeatThread(c, "HeartbeatServerThread-%s" % c, c, receiver=True)
+    #logger.info('Start HeartbeatServerThread')
+    #threads.append(thread)
+    #gtgtgtthread.daemon = True
+    #thread.start() 
+    #t1.join()
+    #thread.join()
