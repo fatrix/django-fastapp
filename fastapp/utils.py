@@ -220,3 +220,7 @@ if any(arg.startswith('run') for arg in sys.argv):
     #thread.start() 
     #t1.join()
     #thread.join()
+
+    # that should be somewhere else
+    #from fastapp.controller import start_executors
+    #start_executors()

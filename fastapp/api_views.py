@@ -68,6 +68,18 @@ class BaseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Base.objects.filter(user=self.request.user)
 
+    def start(self, request, pk):
+        print "starting %s" % pk
+        base = self.get_queryset().get(id=pk)
+        base.start()
+        return Response()
+
+    def stop(self, request, pk):
+        print "stopping %s" % pk
+        base = self.get_queryset().get(id=pk)
+        base.stop()
+        return Response()
+
     @link()
     def apy(self, request, pk=None):
         queryset = Apy.objects.filter(base__pk=pk)

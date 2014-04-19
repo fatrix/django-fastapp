@@ -1,10 +1,8 @@
 import logging
 import traceback
 import json
-import copy
 import dropbox
 import time
-from bunch import Bunch
 
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
@@ -27,7 +25,7 @@ from fastapp import __version__ as version
 
 from utils import UnAuthorized, Connection, NoBasesFound
 from utils import info, error, warn, channel_name_for_user, debug, send_client
-from fastapp.models import AuthProfile, Base, Apy, Setting
+from fastapp.models import AuthProfile, Base, Apy, Setting, Executor
 
 from django.core.cache import cache
 
@@ -161,6 +159,8 @@ class DjendExecView(View, DjendMixin):
         # get base
         base = kwargs['base']
         base_model = get_object_or_404(Base, name=base)
+
+
 
         # exec id
         exec_id = kwargs['id']

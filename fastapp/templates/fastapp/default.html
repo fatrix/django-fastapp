@@ -7,8 +7,14 @@
 		 	<div><h1>My bases</h1></div>
 		 	{% verbatim %}
 		 	<div class="highlight bases col-md-3" ng-repeat="one_base in bases | orderBy:'name':false">
-		 		<h4><a href="/fastapp/{{ one_base.name }}/index/">{{ one_base.name }}</a></h4>
-		 			<div ng-repeat="apy in one_base.apy_models | orderBy:'name':false">
+		 		<h4>
+		 			<a href="/fastapp/{{ one_base.name }}/index/">{{ one_base.name }}</a>
+		 			<button type="button" class="btn btn-default btn-xs" ng-click="cycle_state(one_base)">
+		 				<span ng-show="one_base.state == false">Stopped</span>
+		 				<span ng-show="one_base.state == true">Started</span>
+		 			</button>
+		 		</h4>
+		 		<div ng-repeat="apy in one_base.apy_models | orderBy:'name':false">
 		 				<button type="button" class="btn btn-default btn-xs"> {{ apy.name }} </button>
 		 		</div>
 		 	</div>

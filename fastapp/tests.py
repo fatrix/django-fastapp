@@ -1,8 +1,8 @@
-from django.test import TransactionTestCase, TestCase, Client
+from django.test import TransactionTestCase, Client
 from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 
-from fastapp.models import Base, Apy, Counter
+from fastapp.models import Base, Apy, Executor
 import json
 
 class BaseTestCase(TransactionTestCase):
@@ -77,6 +77,19 @@ class ApiTestCase(BaseTestCase):
 		# delete
 		response = self.client1.delete("/fastapp/api/base/%s/apy/%s/" % (self.base1.id, json_response['id']))
 		self.assertEqual(204, response.status_code)
+
+class BaseExecutorStateTestCase(BaseTestCase):
+
+	def test_base_has_executor_instance(self):
+		base = self.base1
+		self.assertIs(base.executor.__class__, Executor)
+		self.assertIs(base.executor.id, 1)
+
+	def test_get_all_apys_for_base(self):
+		self.client1.login(username='user1', password='pass')
+		response = self.client1.get("/fastapp/api/base/%s/" % self.base1.id)
+		self.assertEqual(200, response.status_code)
+		self.assertJSONEqual(response.content, json.loads('{"id": 1, "name": "base1", "state": false}'))
 
 class ApyExecutionTestCase(BaseTestCase):
 

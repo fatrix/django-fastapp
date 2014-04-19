@@ -21,8 +21,8 @@ class Command(BaseCommand):
                 thread.daemon = True
                 thread.start()
 
-        thread = HeartbeatThread(c, "HeartbeatServerThread-%s" % c, c)
-        self.stdout.write('Start HeartbeatServerThread')
+        thread = HeartbeatThread(c, "HeartbeatThread-%s" % c, c)
+        self.stdout.write('Start HeartbeatThread')
         threads.append(thread)
         thread.daemon = True
         thread.start()

@@ -229,7 +229,7 @@ class HeartbeatThread(threading.Thread):
         self.channel.queue_declare(queue=HEARTBEAT_QUEUE)
 
         while True:
-            logger.info("Heartbeat")
+            logger.info("Sending Heartbeat")
             self.channel.basic_publish(exchange='',
                     routing_key=b'heartbeat_queue',
                     properties=pika.BasicProperties(

@@ -4,6 +4,7 @@ import pusher
 import pika
 import threading
 from django.conf import settings
+from fastapp.models import Base, Executor
 
 #monkey.patch_all()
 def get_pusher_instance():

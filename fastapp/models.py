@@ -1,6 +1,9 @@
 import urllib
 import ConfigParser
 import io
+import subprocess
+import os
+import signal
 import StringIO
 import gevent
 import json
@@ -8,7 +11,7 @@ import json
 from django.db import models
 from django.contrib.auth.models import User
 from django.template import Template
-from django_extensions.db.fields import UUIDField
+from django_extensions.db.fields import UUIDField, ShortUUIDField
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import F
@@ -34,7 +37,6 @@ class AuthProfile(models.Model):
 
 class Base(models.Model):
     name = models.CharField(max_length=32)
-    uuid = UUIDField(auto=True)
     content = models.CharField(max_length=8192, blank=True, default=index_template)
     user = models.ForeignKey(User, related_name='+', default=0, blank=True)
     public = models.BooleanField(default=False)
@@ -110,6 +112,19 @@ class Base(models.Model):
         t = Template(self.content)
         return t.render(context)
 
+    @property
+    def state(self):
+        try:
+            return self.executor.is_running()
+        except IndexError, e:
+            return False
+
+    def start(self):
+        return self.executor.start()
+
+    def stop(self):
+        return self.executor.stop()
+
     def __str__(self):
         return "<Base: %s>" % self.name
 
@@ -148,15 +163,45 @@ class Setting(models.Model):
 
 class Instance(models.Model):
     is_alive = models.BooleanField(default=False)
+    uuid = ShortUUIDField(auto=True)
+    last_beat = models.DateTimeField(auto_now=True)
     executor = models.ForeignKey("Executor", related_name="instances")
 
 class Host(models.Model):
     name = models.CharField(max_length=50)
 
 class Executor(models.Model):
-    user = models.ForeignKey(User, related_name="executor")
-    num_instances = 1
-    host = models.ForeignKey(Host)
+    base = models.OneToOneField(Base, related_name="executor")
+    num_instances = models.IntegerField(default=1)
+    pid = models.CharField(max_length=10, null=True)
+    #host = models.ForeignKey(Host)
+
+    def start(self):
+        print "Start manage.py start_worker"
+        p = subprocess.Popen("/Users/fatrix/virtualenvs/sahli_net/bin/python manage.py start_worker --settings=envs.local", 
+            cwd="/Users/fatrix/Dropbox/Repositories/sahli.net/app/sahli_net", 
+            shell=True, stdin=None, stdout=None, stderr=None)
+        self.pid = p.pid
+        print "Subprocess started with pid %s" % self.pid
+        self.save()
+
+    def stop(self):
+        print "kill process with PID %s" % self.pid
+        os.kill(int(self.pid), signal.SIGKILL)
+        if not self.is_running():
+            self.pid = None
+            self.save()
+
+    def is_running(self):
+        # if no pid, return directly false
+        if not self.pid:
+            return False
+
+        # if pid, check
+        return (subprocess.call("/bin/ps -ef|egrep -v grep|egrep -c %s 1>/dev/null" % self.pid, shell=True)==0)
+
+    def is_alive(self):
+        return self.instances.count()>1
 
 @receiver(post_save, sender=Base)
 def initialize_on_storage(sender, *args, **kwargs):
@@ -199,11 +244,21 @@ def send_to_workers(sender, *args, **kwargs):
 @receiver(post_save, sender=Base)
 def synchronize_base_to_storage(sender, *args, **kwargs):
     instance = kwargs['instance']
+
+    # create executor instance if none
     try:
-        connection = Connection(instance.user.authprofile.access_token)
-        gevent.spawn(connection.put_file("%s/index.html" % instance.name, instance.content))
-    except Exception, e:
-        logger.exception("error in synchronize_base_to_storage")
+        instance.executor
+    except Executor.DoesNotExist, e:
+        print "create executor"
+        executor = Executor(base=instance)
+        print executor.save()
+                
+
+    #try:
+    #    connection = Connection(instance.user.authprofile.access_token)
+    #    gevent.spawn(connection.put_file("%s/index.html" % instance.name, instance.content))
+    #except Exception, e:
+    #    logger.exception("error in synchronize_base_to_storage")
 
 @receiver(post_delete, sender=Base)
 def base_to_storage_on_delete(sender, *args, **kwargs):
