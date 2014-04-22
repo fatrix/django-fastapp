@@ -45,6 +45,7 @@ window.app.controller('BasesCtrl', ['$scope', 'Bases', 'Base', 'Apy', function($
       Base.start({baseId: base.id}, base, function(data) {
         console.log(data);
         base.state = true;
+        base.pids = data['pids'];
       });
     }
   };

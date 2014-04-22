@@ -26,9 +26,10 @@ class SettingSerializer(serializers.ModelSerializer):
 class BaseSerializer(serializers.ModelSerializer):
     apy = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     state = serializers.Field()
+    pids = serializers.Field()
 
     class Meta:
         model = Base
         #fields = ('id', 'name', 'uuid')
-        fields = ('id', 'name', 'state')
+        fields = ('id', 'name', 'state', 'pids')
 

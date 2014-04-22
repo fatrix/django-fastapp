@@ -11,7 +11,7 @@
 		 			<a href="/fastapp/{{ one_base.name }}/index/">{{ one_base.name }}</a>
 		 			<button type="button" class="btn btn-default btn-xs" ng-click="cycle_state(one_base)">
 		 				<span ng-show="one_base.state == false">Stopped</span>
-		 				<span ng-show="one_base.state == true">Started</span>
+		 				<span ng-show="one_base.state == true">Started (PID's: {{ one_base.pids }})</span>
 		 			</button>
 		 		</h4>
 		 		<div ng-repeat="apy in one_base.apy_models | orderBy:'name':false">

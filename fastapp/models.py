@@ -3,6 +3,7 @@ import ConfigParser
 import io
 import subprocess
 import os
+import sys
 import signal
 import StringIO
 import gevent
@@ -16,6 +17,7 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import F
 from django.db.transaction import commit_on_success
+from django.conf import settings
 from fastapp.utils import Connection, NotFound
 from fastapp.executors.remote import distribute, CONFIGURATION_QUEUE, SETTING_QUEUE
 
@@ -119,6 +121,15 @@ class Base(models.Model):
         except IndexError, e:
             return False
 
+    @property
+    def pids(self):
+        try:
+            if self.executor.pid is None:
+                return []
+            return [self.executor.pid]
+        except Exception, e:
+            return []
+
     def start(self):
         return self.executor.start()
 
@@ -178,8 +189,10 @@ class Executor(models.Model):
 
     def start(self):
         print "Start manage.py start_worker"
-        p = subprocess.Popen("/Users/fatrix/virtualenvs/sahli_net/bin/python manage.py start_worker --settings=envs.local", 
-            cwd="/Users/fatrix/Dropbox/Repositories/sahli.net/app/sahli_net", 
+        python_path = sys.executable
+        p = subprocess.Popen("%s manage.py start_worker --settings=envs.local" % python_path, 
+            #cwd="/Users/fatrix/Dropbox/Repositories/sahli.net/app/sahli_net", 
+            cwd=settings.PROJECT_ROOT,
             shell=True, stdin=None, stdout=None, stderr=None)
         self.pid = p.pid
         print "Subprocess started with pid %s" % self.pid
@@ -187,7 +200,7 @@ class Executor(models.Model):
 
     def stop(self):
         print "kill process with PID %s" % self.pid
-        os.kill(int(self.pid), signal.SIGKILL)
+        os.kill(int(self.pid), signal.SIGTERM)
         if not self.is_running():
             self.pid = None
             self.save()
@@ -247,7 +260,7 @@ def synchronize_base_to_storage(sender, *args, **kwargs):
 
     # create executor instance if none
     try:
-        instance.executor
+        print instance.executor
     except Executor.DoesNotExist, e:
         print "create executor"
         executor = Executor(base=instance)

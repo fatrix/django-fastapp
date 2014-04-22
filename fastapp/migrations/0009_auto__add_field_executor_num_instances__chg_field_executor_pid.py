@@ -17,13 +17,27 @@ class Migration(SchemaMigration):
         # Changing field 'Executor.pid'
         db.alter_column(u'fastapp_executor', 'pid', self.gf('django.db.models.fields.CharField')(max_length=10, null=True))
 
+        for base in orm.Base.objects.all():
+            #import pdb; pdb.set_trace()
+            #try:
+            #    print base.executor
+            #    base.executor
+            #except orm.Executor.DoesNotExist, e:
+                #print "create executor"
+                #executor = orm.Executor(base=instance)
+                #print executor.save()
+            print "create executor"
+            executor = orm.Executor(base=base)
+            print executor.save()
+              
+
     def backwards(self, orm):
         # Deleting field 'Executor.num_instances'
         db.delete_column(u'fastapp_executor', 'num_instances')
 
 
         # Changing field 'Executor.pid'
-        db.alter_column(u'fastapp_executor', 'pid', self.gf('django.db.models.fields.CharField')(default=None, max_length=10))
+        db.alter_column(u'fastapp_executor', 'pid', self.gf('django.db.models.fields.CharField')(default=None, max_length=10, null=True))
 
     models = {
         u'auth.group': {

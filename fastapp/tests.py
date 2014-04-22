@@ -85,11 +85,17 @@ class BaseExecutorStateTestCase(BaseTestCase):
 		self.assertIs(base.executor.__class__, Executor)
 		self.assertIs(base.executor.id, 1)
 
+		# check if created second
+		self.base1.save()
+		self.base1.save()
+		self.base1.save()
+		self.assertIs(Executor.objects.count(), 1)
+
 	def test_get_all_apys_for_base(self):
 		self.client1.login(username='user1', password='pass')
 		response = self.client1.get("/fastapp/api/base/%s/" % self.base1.id)
 		self.assertEqual(200, response.status_code)
-		self.assertJSONEqual(response.content, json.loads('{"id": 1, "name": "base1", "state": false}'))
+		self.assertJSONEqual(response.content, json.loads('{"id": 2, "name": "base1", "state": false}'))
 
 class ApyExecutionTestCase(BaseTestCase):
 
