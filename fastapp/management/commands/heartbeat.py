@@ -3,6 +3,7 @@ import logging
 import sys
 
 from fastapp.executors.remote import HeartbeatThread
+from fastapp.defaults import *
 
 logger = logging.getLogger("fastapp.executors.remote")
 
@@ -12,16 +13,10 @@ class Command(BaseCommand):
 
 
     def handle(self, *args, **options):
-        THREAD_COUNT = 10
+        THREAD_COUNT = FASTAPP_HEARTBEAT_LISTENER_THREADCOUNT
         threads = []
         for c in range(1, THREAD_COUNT):
-                #thread = ExecutorServerThread(c, "ExecutorServerThread-%s" % c, c)
-                #self.stdout.write('Start ExecutorServerThread')
-                #threads.append(thread)
-                #thread.daemon = True
-                #thread.start()
-
-                thread = HeartbeatThread(c, "HeartbeatThread-%s" % c, c, receiver=True)
+                thread = HeartbeatThread(c, "HeartbeatThread-%s" % c, c, None, receiver=True)
                 self.stdout.write('Start HeartbeatThread')
                 threads.append(thread)
                 thread.daemon = True

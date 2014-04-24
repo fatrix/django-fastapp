@@ -1,5 +1,6 @@
-/usr/local/sbin/rabbitmqctl add_vhost philipsahli
+/usr/local/sbin/rabbitmqctl add_vhost philipsahli-aaaa
 /usr/local/sbin/rabbitmqctl list_users
 
-/usr/local/sbin/rabbitmqctl add_user philipsahli changeit
-/usr/local/sbin/rabbitmqctl set_permissions -p philipsahli philipsahli "^philipsahli-.*" ".*" ".*"
+/usr/local/sbin/rabbitmqctl add_user philipsahli philipsahli
+/usr/local/sbin/rabbitmqctl set_permissions -p philipsahli-aaaa philipsahli "^philipsahli-.*" ".*" ".*"
+/usr/local/sbin/rabbitmqctl set_permissions -p philipsahli-aaaa philipsahli "^.*" ".*" ".*"

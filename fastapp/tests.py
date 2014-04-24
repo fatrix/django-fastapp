@@ -97,6 +97,11 @@ class BaseExecutorStateTestCase(BaseTestCase):
 		self.assertEqual(200, response.status_code)
 		self.assertJSONEqual(response.content, json.loads('{"id": 2, "name": "base1", "state": false}'))
 
+	def test_generate_vhost_configuration(self):
+		from fastapp.queue import generate_vhost_configuration
+		vhost = generate_vhost_configuration('username', 'base1')
+		self.assertEquals(vhost, "username-base1")
+
 class ApyExecutionTestCase(BaseTestCase):
 
 	def test_execute_apy_logged_in(self):

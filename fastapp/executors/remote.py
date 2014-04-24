@@ -8,11 +8,12 @@ import traceback
 import time
 from bunch import Bunch
 from django.core import serializers
+from fastapp.utils import connect_to_queuemanager
 #from fastapp.models import Apy
 
 logger = logging.getLogger(__name__)
 
-def distribute(event, apy):
+def distribute(event, apy, vhost, username, password):
 
     class ExecutorClient(object):
         """
@@ -20,29 +21,31 @@ def distribute(event, apy):
         Then the client is ready to response for execution requests.
 
         """
-        def __init__(self):
+        def __init__(self, vhost, username, password):
             # get needed stuff
-            self.connection = pika.BlockingConnection(pika.ConnectionParameters(
-                    host='localhost'))
+            self.connection = connect_to_queuemanager(
+                vhost=vhost,
+                username=username,
+                password=password
+                )
 
             self.channel = self.connection.channel()
             self.channel.exchange_declare(exchange=event, type='fanout')
 
 
         def call(self, body):
-            #import pdb; pdb.set_trace()
             self.channel.basic_publish(exchange=event,
                                        routing_key='',
                                        body=body)
 
             self.connection.close()
 
-    executor = ExecutorClient()
+    executor = ExecutorClient(vhost, username, password)
     executor.call(apy)
 
     return  True
 
-def call_rpc_client(apy):
+def call_rpc_client(apy, vhost, username, password):
 
     class ExecutorClient(object):
         """
@@ -50,10 +53,13 @@ def call_rpc_client(apy):
         Then the client is ready to response for execution requests.
 
         """
-        def __init__(self):
+        def __init__(self, vhost, username, password):
             # get needed stuff
-            self.connection = pika.BlockingConnection(pika.ConnectionParameters(
-                    host='localhost'))
+            self.connection = connect_to_queuemanager(
+                vhost=vhost,
+                username=username,
+                password=password
+                )
 
 
             self.channel = self.connection.channel()
@@ -93,7 +99,7 @@ def call_rpc_client(apy):
                 self.connection.process_data_events()
             return self.response
 
-    executor = ExecutorClient()
+    executor = ExecutorClient(vhost, username, password)
 
     try:
         response = executor.call(apy)
@@ -114,11 +120,16 @@ RPC_QUEUE = "rpc_queue"
 HEARTBEAT_QUEUE = "heartbeat_queue"
 
 class ExecutorServerThread(threading.Thread):
-    def __init__(self, threadID, name, counter):
+    def __init__(self, threadID, name, counter, vhost, username, password):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
         self.counter = counter
+
+        # adds
+        self.vhost = vhost
+        self.username = username
+        self.password = password
 
         # container for functions
         self.functions = {}
@@ -131,8 +142,11 @@ class ExecutorServerThread(threading.Thread):
 
     def listen(self):
         # open connection and channel
-        connection = pika.BlockingConnection(pika.ConnectionParameters(
-                host='localhost'))
+        connection = connect_to_queuemanager(
+                vhost=self.vhost,
+                username=self.username,
+                password=self.password
+                )
         channel = connection.channel()
 
 
@@ -164,7 +178,6 @@ class ExecutorServerThread(threading.Thread):
                 self.functions.update({
                     fields['name']: func,
                     })
-                #print "Configuration '%s' received in %s" % (fields['name'], self.name)
                 logger.info("Configuration '%s' received in %s" % (fields['name'], self.name))
             except Exception, e:
                 logger.exception(e)
@@ -174,7 +187,6 @@ class ExecutorServerThread(threading.Thread):
             key = json_body.keys()[0]
             #fields = json.loads(body)[0]['fields']
             self.settings.update(json_body)
-            #print "Setting '%s' received in %s" % (key, self.name)
             logger.info("Setting '%s' received in %s" % (key, self.name))
 
         def on_rpc_request(ch, method, props, body):
@@ -205,12 +217,14 @@ class ExecutorServerThread(threading.Thread):
 
 class HeartbeatThread(threading.Thread):
 
-    def __init__(self, threadID, name, counter, receiver=False):
+    def __init__(self, threadID, name, counter, vhost, receiver=False):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
         self.counter = counter
         self.receiver = receiver
+
+        self.vhost = vhost
 
         self.in_sync = False
 
@@ -225,11 +239,12 @@ class HeartbeatThread(threading.Thread):
         # open connection and channel
         connection = pika.BlockingConnection(pika.ConnectionParameters(
                 host='localhost'))
+
         self.channel = connection.channel()
         self.channel.queue_declare(queue=HEARTBEAT_QUEUE)
 
         while True:
-            logger.info("Sending Heartbeat")
+            logger.info("Sending Heartbeat from %s" % self.vhost)
             self.channel.basic_publish(exchange='',
                     routing_key=b'heartbeat_queue',
                     properties=pika.BasicProperties(
@@ -238,36 +253,40 @@ class HeartbeatThread(threading.Thread):
                         #correlation_id = self.corr_id,
                     ),
                     body=json.dumps({
-                        'in_sync': self.in_sync 
+                        'in_sync': self.in_sync,
+                        'vhost': self.vhost 
                         }))
             self.in_sync = True
             time.sleep(10)
 
-        #fields = json.loads(body)[0]['fields']
-        #exec fields['module'] in globals(), locals()
-        #exec fields['module'] in globals(), globals()
-        #exec fields['module'] in globals(), locals()
-        #exec fields['module'] in globals(), locals()
-        #self.functions.update({
-        #    fields['name']: func,
-        #    })
-        #print "Configur
-
-
     def listen(self):
         def on_beat(ch, method, props, body):
-            logger.info("heartbeat received")
-            if not (json.loads(body)['in_sync']):
+            data = json.loads(body)
+            vhost = data['vhost']
+
+            logger.info("heartbeat received from %s" % vhost)
+
+            if not data['in_sync']:
+
+                base = vhost.split("-")[1]
                 logger.info("run sync")
                 from fastapp.models import Apy, Setting
-                for instance in Apy.objects.all():
-                    #print instance, CONFIGURATION_QUEUE
-                    distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]))
+                for instance in Apy.objects.filter(base__name=base):
+                    distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]), 
+                        #"philipsahli-aaaa", 
+                        vhost,
+                        "philipsahli", 
+                        "philipsahli"
+                        )
 
-                for instance in Setting.objects.all():
+
+                for instance in Setting.objects.filter(base__name=base):
                     distribute(SETTING_QUEUE, json.dumps({
                         instance.key: instance.value
-                        })
+                        }), 
+                        vhost,
+                        "philipsahli", 
+                        "philipsahli"
                     )
 
             #ch.basic_ack(delivery_tag = method.delivery_tag)

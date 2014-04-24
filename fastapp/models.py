@@ -18,7 +18,7 @@ from django.dispatch import receiver
 from django.db.models import F
 from django.db.transaction import commit_on_success
 from django.conf import settings
-from fastapp.utils import Connection, NotFound
+from fastapp.queue import generate_vhost_configuration
 from fastapp.executors.remote import distribute, CONFIGURATION_QUEUE, SETTING_QUEUE
 
 from django.core import serializers
@@ -64,6 +64,7 @@ class Base(models.Model):
 
 
     def refresh(self, put=False):
+        from fastapp.utils import Connection, NotFound
         connection = Connection(self.user.authprofile.access_token)
         template_name = "%s/index.html" % self.name
         #if put:
@@ -75,6 +76,7 @@ class Base(models.Model):
         self.content = template_content
 
     def refresh_execs(self, exec_name=None, put=False):
+        from fastapp.utils import Connection, NotFound
         # execs
         connection = Connection(self.user.authprofile.access_token)
         app_config = "%s/app.config" % self.name
@@ -189,9 +191,13 @@ class Executor(models.Model):
 
     def start(self):
         print "Start manage.py start_worker"
+        from queue import create_vhost
+        create_vhost(self.base)
+        
         python_path = sys.executable
-        p = subprocess.Popen("%s manage.py start_worker --settings=envs.local" % python_path, 
-            #cwd="/Users/fatrix/Dropbox/Repositories/sahli.net/app/sahli_net", 
+        p = subprocess.Popen("%s manage.py start_worker --settings=envs.local --base=%s --username=%s --password=%s" % (python_path, 
+            self.base.name, 
+            self.base.user.username, self.base.user.username),
             cwd=settings.PROJECT_ROOT,
             shell=True, stdin=None, stdout=None, stderr=None)
         self.pid = p.pid
@@ -244,14 +250,19 @@ def synchronize_to_storage(sender, *args, **kwargs):
         counter = Counter(apy=instance)
         counter.save()
 
-    distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]))
+    distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]), 
+        generate_vhost_configuration(instance.base.user.username, instance.base.name), 
+        instance.base.user.username, 
+        instance.base.user.username
+    )
 
 @receiver(post_save, sender=Setting)
 def send_to_workers(sender, *args, **kwargs):
     instance = kwargs['instance']
-    distribute(SETTING_QUEUE, json.dumps({
-        instance.key: instance.value
-        })
+    distribute(SETTING_QUEUE, json.dumps({instance.key: instance.value}), 
+        generate_vhost_configuration(instance.base.user.username, instance.base.name), 
+        instance.base.user.username, 
+        instance.base.user.username
     )
 
 @receiver(post_save, sender=Base)

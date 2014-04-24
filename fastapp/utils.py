@@ -5,9 +5,11 @@ import json
 import StringIO
 import hashlib
 import pika
+import sys
 from django.contrib import messages
 from django.conf import settings
 from dropbox.rest import ErrorResponse
+
 
 
 class UnAuthorized(Exception):
@@ -102,24 +104,36 @@ def channel_name_for_user_by_user(user):
     logger.debug("channel_name: %s" % channel_name)
     return channel_name
 
-def connect_to_queue(queue):
+
+def connect_to_queuemanager(host="localhost", vhost="/", username="guest", password="guest"):
+    credentials = pika.PlainCredentials(username, password)
+    logger.info("Trying to connect to: %s, %s, %s, %s" % (host, vhost, username, password))
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, virtual_host=vhost, heartbeat_interval=20, credentials=credentials))
+    except Exception, e:
+        logger.exception(e)
+        raise e
+    return connection
+
+def connect_to_queue(host, queue, vhost="/", username="guest", password="guest"):
     logger.info("Connect to %s" % queue)
     try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost', heartbeat_interval=20))
+        #connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost', virtual_host=vhost, heartbeat_interval=20))
+        connection = connect_to_queuemanager(host, vhost, username, password)
         channel = connection.channel()
         #d = channel.queue_declare(queue, durable=True)
         d = channel.queue_declare(queue)
         logger.info(d.method)
         if d.method.__dict__['consumer_count']:
             logger.error("No consumer on queue %s" % queue)
-    except pika.exceptions.AMQPConnectionException, e:
+    except Exception, e:
         logger.exception(e)
     return channel
 
 def send_client(channel_name, event, data):
     logger.info("START EVENT_TO_QUEUE %s" % event)
 
-    channel = connect_to_queue('pusher_events')
+    channel = connect_to_queue('localhost', 'pusher_events')
     #channel = pusher
 
     payload = {
@@ -198,8 +212,10 @@ def consume(channel):
     channel.start_consuming()
     channel.basic_ack()
 
+
+
 def start_sender():
-    channel = connect_to_queue('pusher_events')
+    channel = connect_to_queue('localhost', 'pusher_events')
     from threading import Thread
     logger.info("Start thread for consume")
     t = Thread(target=consume, args=(channel,))
@@ -207,20 +223,9 @@ def start_sender():
     t.start()
     return t
 
-import sys
+
 if any(arg.startswith('run') for arg in sys.argv):
     # create connection to pusher_queue
-    #
     logger.info("Start sending events to pusher")
     t1 = start_sender()
-    #thread = HeartbeatThread(c, "HeartbeatServerThread-%s" % c, c, receiver=True)
-    #logger.info('Start HeartbeatServerThread')
-    #threads.append(thread)
-    #gtgtgtthread.daemon = True
-    #thread.start() 
-    #t1.join()
-    #thread.join()
 
-    # that should be somewhere else
-    #from fastapp.controller import start_executors
-    #start_executors()

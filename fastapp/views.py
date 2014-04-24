@@ -25,6 +25,7 @@ from fastapp import __version__ as version
 
 from utils import UnAuthorized, Connection, NoBasesFound
 from utils import info, error, warn, channel_name_for_user, debug, send_client
+from fastapp.queue import generate_vhost_configuration
 from fastapp.models import AuthProfile, Base, Apy, Setting, Executor
 
 from django.core.cache import cache
@@ -204,7 +205,9 @@ class DjendExecView(View, DjendMixin):
         try:
             # _do on remote
             start = int(round(time.time() * 1000))
-            response_data = call_rpc_client(json.dumps(rpc_request_data))
+            response_data = call_rpc_client(json.dumps(rpc_request_data), 
+                #"/", "guest", "guest")
+                generate_vhost_configuration(self.request.user.username, base_model.name), self.request.user.username,  self.request.user.username)
             end = int(round(time.time() * 1000))
             ms=str(end-start)
 
