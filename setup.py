@@ -14,7 +14,9 @@ setup(name='django-fastapp',
 		'pusher==0.8',
 		'mongoengine==0.8.6',
 		'pymongo==2.6.3',
-		'bunch==1.0.1'
+		'bunch==1.0.1',
+		'gevent==1.0',
+		'pika==0.9.13'
 	],
     packages = find_packages(),
     package_data = {'fastapp': ['fastapp/templates/*']},

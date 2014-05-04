@@ -1,14 +1,9 @@
 import logging
 import traceback
 import json
-import datetime
-import copy
-import pusher
-import hashlib
 import dropbox
-from bunch import Bunch
+import time
 
-from django.core import serializers
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.contrib import messages
@@ -18,144 +13,264 @@ from django.template import RequestContext
 from django.template.loader import render_to_string
 from django.views.generic import View
 from django.views.decorators.csrf import csrf_exempt
-from django.http import HttpResponseNotFound, HttpResponse, HttpResponseRedirect, HttpResponseBadRequest, HttpResponseForbidden
+from django.http import HttpResponseNotFound, HttpResponse, HttpResponseRedirect, HttpResponseBadRequest, HttpResponseForbidden, HttpResponseServerError
 from django.views.generic.base import ContextMixin
 from django.conf import settings
-import dropbox
+from django.views.generic import TemplateView
+from django.views.decorators.cache import never_cache
+from django.core import serializers
 from dropbox.rest import ErrorResponse
 from fastapp.utils import message
 from fastapp import __version__ as version
 
 from utils import UnAuthorized, Connection, NoBasesFound
-from fastapp.models import AuthProfile, Base, Exec, Setting
+from utils import info, error, warn, channel_name_for_user, debug, send_client
+from fastapp.queue import generate_vhost_configuration
+from fastapp.models import AuthProfile, Base, Apy, Setting, Executor
+from fastapp import responses
+
+from django.core.cache import cache
+
+from fastapp.executors.remote import call_rpc_client
+
+logger = logging.getLogger(__name__)
 
 class DjendStaticView(View):
 
+    @never_cache
     def get(self, request, *args, **kwargs):
         static_path = "%s/%s/%s" % (kwargs['base'], "static", kwargs['name'])
-        try:
+        logger.info("get %s" % static_path)
 
+        f = cache.get(static_path)
+        if not f:
+            logger.info("not in cache: %s" % static_path)
             base_model = Base.objects.get(name=kwargs['base'])
             auth_token = base_model.user.authprofile.access_token
             client = dropbox.client.DropboxClient(auth_token)
-            f = client.get_file(static_path).read()
+            # TODO: check if in cache?
+            try:
+                f = client.get_file(static_path).read()
+            except ErrorResponse, e:
+                logger.error("not found: '%s'" % static_path)
+                return HttpResponseNotFound("Not found: "+static_path)
+            cache.set(static_path, f, 60)
+            logger.info("cache it: '%s'" % static_path)
+        else:
+            logger.info("found in cache: '%s'" % static_path)
 
-            # default
-            mimetype = "text/plain"
-            if static_path.endswith('.js'):
-                mimetype = "text/javascript"
-            if static_path.endswith('.css'):
-                mimetype = "text/css"
-            if static_path.endswith('.png'):
-                mimetype = "image/png"
-            return HttpResponse(f, mimetype=mimetype)
-        except ErrorResponse, e:
-            return HttpResponseNotFound("Not found: "+static_path)
-
+        # default
+        mimetype = "text/plain"
+        if static_path.endswith('.js'):
+            mimetype = "text/javascript"
+        elif static_path.endswith('.css'):
+            mimetype = "text/css"
+        elif static_path.endswith('.png'):
+            mimetype = "image/png"
+        elif static_path.endswith('.woff'):
+            mimetype = "application/x-font-woff"
+        elif static_path.endswith('.svg'):
+            mimetype = "image/svg+xml"
+        elif static_path.endswith('.ttf'):
+            mimetype = "application/x-font-ttf"
+        elif static_path.lower().endswith('.jpg'):
+            mimetype = "image/jpeg"
+        elif static_path.lower().endswith('.ico'):
+            mimetype = "image/x-icon"
+        else:
+            logger.error("suffix not recognized in '%s'" % static_path)
+            return HttpResponseServerError("Static file suffix not recognized")
+        logger.debug("deliver '%s' with '%s'" % (static_path, mimetype))
+        return HttpResponse(f, mimetype=mimetype)
 
 class DjendMixin(object):
 
     def connection(self, request):
+        logger.info("Creating connection for %s" % request.user)
         return Connection(request.user.authprofile.access_token)
 
 
 class DjendExecView(View, DjendMixin):
     STATE_OK = "OK"
     STATE_NOK = "NOK"
+    STATE_NOT_FOUND = "NOT_FOUND"
+    STATE_TIMEOUT = "TIMEOUT"
 
 
-    def _do(self, sfunc, do_kwargs):
-        exception = None;  returned = None
-        status = self.STATE_OK
-
-        func = None 
-
-        request = do_kwargs['request']
-        username = copy.copy(do_kwargs['request'].user.username)
-
-        # debug incoming request
-        if request.method == "GET":
-            query_string = copy.copy(request.GET)
-        else:
-            query_string = copy.copy(request.POST)
-        try:
-            query_string.pop('json')
-        except KeyError:
-            pass
-
-        user = channel_name_for_user(request)
-        debug(user, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
-
-        try:
-
-            exec sfunc
-            func.username=username
-            func.channel=channel_name_for_user(request)
-            func.request=do_kwargs['request']
-            func.session=do_kwargs['request'].session
-
-            # attach GET and POST data
-            func.GET=copy.deepcopy(request.GET)
-            func.POST=copy.deepcopy(request.POST)
-
-            # attach log functions
-            func.info=info
-            func.debug=debug
-            func.warn=warn
-            func.error=error
-
-            # attatch settings
-            setting_dict = do_kwargs['base_model'].setting.all().values('key', 'value')
-            setting_dict1 = Bunch()
-            for setting in setting_dict:
-                setting_dict1.update({setting['key']: setting['value']})
-            func.settings = setting_dict1
-
-            returned = func(func)
-        except Exception, e:
-            exception = "%s: %s" % (type(e).__name__, e.message)
-            traceback.print_exc()
-            status = self.STATE_NOK
-        return {'status': status, 'returned': returned, 'exception': exception}
+#    def _do(self, sfunc, do_kwargs):
+#        exception = None;  returned = None
+#        status = self.STATE_OK
+#
+#        func = None 
+#
+#        request = do_kwargs['request']
+#        logger.info("do %s %s" % request.method, request.path_info)
+#        username = copy.copy(do_kwargs['request'].user.username)
+#
+#        # debug incoming request
+#        if request.method == "GET":
+#            query_string = copy.copy(request.GET)
+#        else:
+#            query_string = copy.copy(request.POST)
+#        try:
+#            query_string.pop('json')
+#        except KeyError, e:
+#            logger.exception("invalid request")
+#
+#        user = channel_name_for_user(request)
+#        debug(user, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
+#
+#        try:
+#
+#            exec sfunc
+#            func.username=username
+#            func.channel=channel_name_for_user(request)
+#            func.request=do_kwargs['request']
+#            func.session=do_kwargs['request'].session
+#
+#            func.name = do_kwargs['exec_name']
+#
+#            # attach GET and POST data
+#            func.GET=copy.deepcopy(request.GET)
+#            func.POST=copy.deepcopy(request.POST)
+#
+#            # attach log functions
+#            func.info=info
+#            func.debug=debug
+#            func.warn=warn
+#            func.error=error
+#
+#            # attatch settings
+#            setting_dict = do_kwargs['base_model'].setting.all().values('key', 'value')
+#            setting_dict1 = Bunch()
+#            for setting in setting_dict:
+#                setting_dict1.update({setting['key']: setting['value']})
+#            setting_dict1.update({'STATIC_DIR': "/%s/%s/static" % ("fastapp", do_kwargs['base_model'].name)})
+#            func.settings = setting_dict1
+#
+#            returned = func(func)
+#
+#
+#        except Exception, e:
+#            exception = "%s: %s" % (type(e).__name__, e.message)
+#            traceback.print_exc()
+#            status = self.STATE_NOK
+#        return {"status": status, "returned": returned, "exception": exception}
 
     def get(self, request, *args, **kwargs):
+        # get base
         base = kwargs['base']
-        exec_id = kwargs['id']
         base_model = get_object_or_404(Base, name=base)
+
+        # exec id
+        exec_id = kwargs['id']
+
+        # get exec from database
         try:
-            exec_model = base_model.execs.get(name=exec_id)
-        except Exec.DoesNotExist:
+            exec_model = base_model.apys.get(name=exec_id)
+        except Apy.DoesNotExist:
             warn(channel_name_for_user(request), "404 on %s" % request.META['PATH_INFO'])
-            return HttpResponseNotFound("404 on %s" % request.META['PATH_INFO'])
+            return HttpResponseNotFound("404 on %s"     % request.META['PATH_INFO'])
 
-        do_kwargs = {'request': request, 'base_model': base_model}
-        data = self._do(exec_model.module, do_kwargs)
-        data.update({'id': kwargs['id']})
+        user = channel_name_for_user(request)
+        debug(user, "%s-Request received, URI %s" % (request.method, request.path))
 
-        if request.GET.has_key('json'):
+        apy_data = serializers.serialize("json", [exec_model], fields=('base_id', 'name'))
+        struct = json.loads(apy_data)
+        apy_data = json.dumps(struct[0])
+        rpc_request_data = {}
+        rpc_request_data.update({'model': apy_data, 
+                'base_name': base_model.name,
+            })
+        rpc_request_data.update({'request': 
+                { 
+                'method': request.method,
+                'GET': request.GET.__dict__,
+                'POST': request.POST.__dict__,
+                'session': request.session.session_key,
+                'user': {'username': request.user.username},
+                'REMOTE_ADDR': request.META.get('REMOTE_ADDR')
+                }
+            })
+        try:
+            # _do on remote
+            start = int(round(time.time() * 1000))
+            response_data = call_rpc_client(json.dumps(rpc_request_data), 
+                #"/", "guest", "guest")
+                generate_vhost_configuration(self.request.user.username, base_model.name), self.request.user.username,  self.request.user.username)
+            end = int(round(time.time() * 1000))
+            ms=str(end-start)
+
+            logger.info("RESPONSE-time: %sms" %  str(ms))
+            logger.debug("RESPONSE-data: %s" % response_data[:120])
+            data = json.loads(response_data)
+        except Exception, e:
+            logger.exception(e)
+            raise HttpResponseServerError(e)
+
+        # add exec's id to the response dict
+        # add duration of rpc call
+        data.update({
+            "id": kwargs['id'],
+            "time_ms": ms,
+            })
+
+        response_class = data.get("response_class", None)
+        # respond with json
+        if request.GET.has_key('json') or request.GET.has_key('callback'):
             user = channel_name_for_user(request)
-            if data['status'] == "OK":
+            if data["status"] == "OK":
                 info(user, str(data))
-            elif data['status'] == "NOK":
+                exec_model.mark_executed()
+            elif data["status"] in [self.STATE_NOK, self.STATE_NOT_FOUND, self.STATE_TIMEOUT]:
                 error(user, str(data))
+                exec_model.mark_failed()
+
+            # send counter to client
+            cdata = {
+                'counter': 
+                    {'executed': str(Apy.objects.get(id=exec_model.id).counter.executed), 
+                        'failed': str(Apy.objects.get(id=exec_model.id).counter.failed)
+                    },
+                'apy_id': exec_model.id 
+            }
+            user = channel_name_for_user(request)
+            send_client(user, "counter", cdata)
+
+            # the exec can return an HttpResponseRedirect object, where we redirect
             if isinstance(data['returned'], HttpResponseRedirect):
-                #return data
                 location = data['returned']['Location']
                 info(user, "(%s) Redirect to: %s" % (exec_id, location))
-                print location
                 return HttpResponse(json.dumps({'redirect': data['returned']['Location']}), content_type="application/json")
             else:
+                if request.GET.has_key('callback'):
+                    data = '%s(%s);' % (request.REQUEST['callback'], json.dumps(data))
+                    return HttpResponse(data, "application/javascript")
                 return HttpResponse(json.dumps(data), content_type="application/json")
 
-        return HttpResponseRedirect("/fastapp/%s/index/?done=%s" % (base, exec_id))
+        # real response
+        elif response_class:
+            if response_class == u''+responses.XMLResponse.__name__:
+                content_type = json.loads(data['returned'])['content_type']
+                content = json.loads(data['returned'])['content']
+            elif response_class == u''+responses.HTMLResponse.__name__:
+                content_type = json.loads(data['returned'])['content_type']
+                content = json.loads(data['returned'])['content']
+            else:
+                return HttpResponseServerError()
+            return HttpResponse(content, content_type)
+
+        return HttpResponseServerError()
+
+        #return HttpResponse(data['returned'])
 
     @csrf_exempt
     def post(self, request, *args, **kwargs):
-            DjendExecView.get(self, request, args, kwargs)
+        return DjendExecView.get(self, request, *args, **kwargs)
 
-    @csrf_exempt
-    def dispatch(self, *args, **kwargs):
-        return super(DjendExecView, self).dispatch(*args, **kwargs)
+    #@csrf_exempt
+    #def dispatch(self, *args, **kwargs):
+    #    return super(DjendExecView, self).dispatch(*args, **kwargs)
 
 class DjendSharedView(View, ContextMixin):
 
@@ -177,7 +292,7 @@ class DjendSharedView(View, ContextMixin):
         # context
         context['VERSION'] = version
         context['shared_bases'] = request.session['shared_bases']
-        context['FASTAPP_EXECS'] = base_model.execs.all().order_by('name')
+        context['FASTAPP_EXECS'] = base_model.apys.all().order_by('name')
         context['LAST_EXEC'] = request.GET.get('done')
         context['active_base'] = base_model
         context['FASTAPP_NAME'] = base_model.name
@@ -192,7 +307,6 @@ class DjendSharedView(View, ContextMixin):
 #class DjendMessageView(View):
 #
 #    def post(self, request, *args, **kwargs):
-#        print request.POST
 #        info(request.user.username, request.POST)
 #        return HttpResponse()
 #
@@ -200,38 +314,37 @@ class DjendSharedView(View, ContextMixin):
 #    def dispatch(self, *args, **kwargs):
 #        return super(DjendMessageView, self).dispatch(*args, **kwargs)
 
-MODULE_DEFAULT_CONTENT = """def func(self):\n    pass"""
+#MODULE_DEFAULT_CONTENT = """def func(self):\n\tpass"""
 
-class DjendExecSaveView(View):
-
-    def post(self, request, *args, **kwargs):
-        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user))
-
-        # syncing to storage provider
-        # exec
-        if request.POST.has_key('exec_name'):
-            exec_name = request.POST.get('exec_name')
-            # save in database
-            #e = base.execs.get(name=exec_name)
-            try:
-                e, created = Exec.objects.get_or_create(name=exec_name, base=base)
-                if not created:
-                    warn(channel_name_for_user(request), "Exec '%s' does already exist" % exec_name)
-                    return HttpResponseBadRequest()
-                else:
-                    e.module = MODULE_DEFAULT_CONTENT
-                    e.save()
-            except Exception, e:
-                error(channel_name_for_user(request), "Error saving Exec '%s'" % exec_name)
-                return HttpResponseBadRequest(e)
-        # base
-
-        #return HttpResponseRedirect("/fastapp/demo/index/")
-        return HttpResponse('{"redirect": %s}' % request.META['HTTP_REFERER'])
-
-    @csrf_exempt
-    def dispatch(self, *args, **kwargs):
-        return super(DjendExecSaveView, self).dispatch(*args, **kwargs) 
+#class DjendExecSaveView(View):
+#
+#    def post(self, request, *args, **kwargs):
+#        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user))
+#
+#        # syncing to storage provider
+#        # exec
+#        if request.POST.has_key('exec_name'):
+#            exec_name = request.POST.get('exec_name')
+#            # save in database
+#            #e = base.execs.get(name=exec_name)
+#            try:
+#                e, created = Apy.objects.get_or_create(name=exec_name, base=base)
+#                if not created:
+#                    warn(channel_name_for_user(request), "Exec '%s' does already exist" % exec_name)
+#                    return HttpResponseBadRequest()
+#                else:
+#                    e.module = MODULE_DEFAULT_CONTENT
+#                    e.save()
+#            except Exception, e:
+#                error(channel_name_for_user(request), "Error saving Exec '%s'" % exec_name)
+#                return HttpResponseBadRequest(e)
+#        # base
+#
+#        return HttpResponse('{"redirect": %s}' % request.META['HTTP_REFERER'])
+#
+#    @csrf_exempt
+#    def dispatch(self, *args, **kwargs):
+#        return super(DjendExecSaveView, self).dispatch(*args, **kwargs) 
 
 class DjendBaseCreateView(View):
 
@@ -278,7 +391,6 @@ class DjendBaseSettingsView(View):
         base_settings = json.loads(request.POST.get('settings'))
         try:
             for setting in base_settings:
-                print setting
                 base = Base.objects.get(name=kwargs['base'])
                 if setting.has_key('id'):
                     setting_obj = Setting.objects.get(base=base, id=setting['id'])
@@ -303,11 +415,9 @@ class DjendExecDeleteView(View):
 
         # syncing to storage provider
         # exec
-        e = base.execs.get(name=kwargs['id'])
-        print e.delete()
+        e = base.apys.get(name=kwargs['id'])
         try:
             e.delete()
-            print "deleted"
             info(request.user.username, "Exec '%s' deleted" % e.exec_name)
         except Exception, e:
             error(request.user.username, "Error deleting(%s)" % e)
@@ -317,26 +427,23 @@ class DjendExecDeleteView(View):
     def dispatch(self, *args, **kwargs):
         return super(DjendExecDeleteView, self).dispatch(*args, **kwargs)
 
-class DjendExecCloneView(View):
+
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(DjendExecRenameView, self).dispatch(*args, **kwargs) 
+
+class DjendBaseRenameView(View):
 
     def post(self, request, *args, **kwargs):
         base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user.username))
-        clone_count = base.execs.filter(name__startswith="%s_clone" % kwargs['id']).count()
-        created = False
-        while not created:
-            cloned_exec, created = Exec.objects.get_or_create(base=base, name="%s_clone_%s" % (kwargs['id'], str(clone_count+1)))
-            clone_count+=1
-
-        cloned_exec.module = base.execs.get(name=kwargs['id']).module
-        cloned_exec.save()
-
-
-        response_data = {"redirect": request.META['HTTP_REFERER']}
+        base.name = request.POST.get('new_name')
+        base.save()
+        response_data = {"redirect": request.META['HTTP_REFERER'].replace(kwargs['base'], base.name)}
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
-        return super(DjendExecCloneView, self).dispatch(*args, **kwargs)
+        return super(DjendBaseRenameView, self).dispatch(*args, **kwargs) 
 
 class DjendBaseSaveView(View):
 
@@ -348,10 +455,14 @@ class DjendBaseSaveView(View):
         if request.POST.has_key('exec_name'):
             exec_name = request.POST.get('exec_name')
             # save in database
-            e = base.execs.get(name=exec_name)
-            e.module = content
-            e.save()
-            info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
+            e = base.apys.get(name=exec_name)
+            if len(content) > 8200:
+                error(channel_name_for_user(request), "Exec '%s' is to big." % exec_name)
+            else:    
+                e.module = content
+                e.description = request.POST.get('exec_description')
+                e.save()
+                info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
         # base
         else:
             base.content = content
@@ -366,30 +477,6 @@ class DjendBaseSaveView(View):
         return super(DjendBaseSaveView, self).dispatch(*args, **kwargs)
 
 class DjendBaseView(View, ContextMixin):
-
- #   def _refresh_bases(self, username):
- #       connection = Connection(AuthProfile.objects.get(user__username=username).access_token)
- #       bases = connection.listing()
- #       for remote_base in bases:
- #           remote_base, created = Base.objects.get_or_create(name=remote_base, user=User.objects.get(username=username))
- #           remote_base.save()
-#
-#        refreshed_bases = []
-#        for base in Base.objects.filter(user__username=username):
-#            if base.name in bases:
-#                logging.debug("refresh base '%s'" % base)
-#                try:
-#                    base.refresh()
-#                    base.refresh_execs()
-#                    base.save()
-#                except Exception, e:
-#                    print traceback.format_exc()
-#
-#                refreshed_bases.append(base)
-#            else:
-#                base.delete()
-#
-#        return refreshed_bases
 
     def _refresh_single_base(self, base):
         base = Base.objects.get(name=base)
@@ -413,20 +500,17 @@ class DjendBaseView(View, ContextMixin):
 
             if refresh and base:
                 self._refresh_single_base(base)
-            #elif refresh:
-            #    self._refresh_bases(request.user.username)
-            #    return HttpResponseRedirect("/fastapp/")
 
             base_model = None
             if base:
                 base_model = get_object_or_404(Base, name=base, user=request.user.id)
-                base_model.save()
-                if refresh:
-                    base_model.refresh_execs()
+                #base_model.save()
+                #if refresh:
+                #    base_model.refresh_execs()
 
                 # execs
                 try:
-                    context['FASTAPP_EXECS'] = base_model.execs.all().order_by('name')
+                    context['FASTAPP_EXECS'] = base_model.apys.all().order_by('name')
                 except ErrorResponse, e:
                     messages.warning(request, "No app.json found", extra_tags="alert-warning")
                     logging.debug(e)
@@ -434,20 +518,15 @@ class DjendBaseView(View, ContextMixin):
             # context
             try:
                 context['bases'] = Base.objects.filter(user=request.user.id).order_by('name')
-                if base is not None:
-                    context['VERSION'] = version
-                    context['FASTAPP_NAME'] = base
-                    context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
-                    context['PUSHER_KEY'] = settings.PUSHER_KEY
-                    context['CHANNEL'] = channel_name_for_user(request)
-                    context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base)
-                    context['active_base'] = base_model
-                    context['LAST_EXEC'] = request.GET.get('done')
-                    rs = base_model.template(context)
-                else:
-                    context['VERSION'] = version
-                    template_name = "fastapp/index.html"
-                    rs = render_to_string(template_name, context_instance=context)
+                context['VERSION'] = version
+                context['FASTAPP_NAME'] = base
+                context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
+                context['PUSHER_KEY'] = settings.PUSHER_KEY
+                context['CHANNEL'] = channel_name_for_user(request)
+                context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base)
+                context['active_base'] = base_model
+                context['LAST_EXEC'] = request.GET.get('done')
+                rs = base_model.template(context)
 
             except ErrorResponse, e:
                 if e.__dict__['status'] == 404:
@@ -460,16 +539,12 @@ class DjendBaseView(View, ContextMixin):
             return HttpResponseRedirect("/fastapp/dropbox_auth_start")
         except NoBasesFound, e:
             message(request, logging.WARNING, "No bases found")
-        #except Exception, e:
-        #    print traceback.format_exc()
-        #    return HttpResponseServerError()
 
         if not rs:
             rs = render_to_string("fastapp/index.html", context_instance=context)
 
         return HttpResponse(rs)
 
-from django.views.generic import TemplateView
 
 class DjendView(TemplateView):
     template_name = "fastapp/default.html"
@@ -477,6 +552,7 @@ class DjendView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super(DjendView, self).get_context_data(**kwargs)
         context['bases'] = Base.objects.filter(user=self.request.user).order_by('name')
+        context['public_bases'] = Base.objects.filter(public=True).order_by('name')
         context['VERSION'] = version
         return context
 
@@ -523,64 +599,28 @@ def dropbox_auth_finish(request):
 
 def login_or_sharedkey(function):
     def wrapper(request, *args, **kwargs):
+        logger.info("authenticate %s" % request.user)
         user=request.user
         # if logged in
         if user.is_authenticated():
             return function(request, *args, **kwargs)
         # if shared key in query string
+        base_name = kwargs.get('base')
         if request.GET.has_key('shared_key'):
             shared_key = request.GET.get('shared_key')
-            base_name = kwargs.get('base')
             get_object_or_404(Base, name=base_name, uuid=shared_key)
             request.session['shared_key'] = shared_key
             return function(request, *args, **kwargs)
-        # if shared key in session
-        if request.session.__contains__('shared_key'):
+        # if shared key in session and corresponds to base
+        has_shared_key = request.session.__contains__('shared_key')
+        if has_shared_key:
+            shared_key = request.session['shared_key']
+            logger.info("authenticate on base '%s' with shared_key '%s'" % (base, shared_key))
+            get_object_or_404(Base, name=base_name, uuid=shared_key)
             return function(request, *args, **kwargs)
+        # don't redirect when access a exec withoud secret key
+        if kwargs.has_key('id'):
+            return HttpResponseNotFound('Ups, wrong URL?')
         return HttpResponseRedirect("/admin/")
     return wrapper
 
-def sign(data):
-    m = hashlib.md5()
-    m.update(data)
-    m.update(settings.SECRET_KEY)
-    return "%s-%s" % (data, m.hexdigest()[:10])
-
-def channel_name_for_user(request):
-        if request.user.username:
-            channel_name = "%s-%s" % (request.user.username, sign(request.user.username))
-        else:
-            channel_name = "anon-%s" % sign(request.session.session_key)
-        return channel_name
-
-
-def user_message(level, username, message):
-
-    channel = username
-
-    p = pusher.Pusher(
-      app_id=settings.PUSHER_APP_ID,
-      key=settings.PUSHER_KEY,
-      secret=settings.PUSHER_SECRET
-    )
-    now = datetime.datetime.now()
-    if level == logging.INFO:
-        class_level = "info"        
-    elif level == logging.DEBUG:
-        class_level = "debug"        
-    elif level == logging.WARNING:
-        class_level = "warn"        
-    elif level == logging.ERROR:
-        class_level = "error"        
-
-    p[channel].trigger('console_msg', {'datetime': str(now), 'message': str(message), 'class': class_level})
-
-def info(username, gmessage): 
-        return user_message(logging.INFO, username, gmessage)
-def debug(username, gmessage): 
-        return user_message(logging.DEBUG, username, gmessage)
-def error(username, gmessage): 
-        return user_message(logging.ERROR, username, gmessage)
-def warn(username, gmessage): 
-        print "WARN"
-        return user_message(logging.WARN, username, gmessage)
