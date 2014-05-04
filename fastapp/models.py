@@ -215,7 +215,10 @@ class Executor(models.Model):
 
     def stop(self):
         print "kill process with PID %s" % self.pid
-        os.kill(int(self.pid), signal.SIGTERM)
+        try:
+            os.kill(int(self.pid), signal.SIGTERM)
+        except OSError, e:
+            pass
         if not self.is_running():
             self.pid = None
             self.save()
