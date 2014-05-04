@@ -1,6 +1,6 @@
 dropbox==1.6
 requests==2.0.1
--e git+https://github.com/django-extensions/django-extensions.git@893bcffdb79dbdd98ecf5aebe30452080c71ac7a#egg=django_extensions-master
+django-extensions==1.3.5
 pusher==0.8
 mongoengine==0.8.6
 pymongo==2.6.3
