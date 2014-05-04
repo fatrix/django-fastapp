@@ -1,29 +1,29 @@
-__version__ = "0.412"
+__version__ = "0.413"
 
-import pusher
+#import pusher
 #import pika
 #import threading
-from django.conf import settings
+#from django.conf import settings
 #from fastapp.models import Base, Executor
 
 #monkey.patch_all()
-def get_pusher_instance():
-    print "get_pusher"
-    p = pusher.Pusher(
-      app_id=settings.PUSHER_APP_ID,
-      key=settings.PUSHER_KEY,
-      secret=settings.PUSHER_SECRET
-    )
-    return p
-pusher_instance = get_pusher_instance()
+#pusher_instance = None
+#def get_pusher_instance():
+#	if pusher_instance:
+#	    print "get_pusher"
+#	    pusher_instance = pusher.Pusher(
+#	      app_id=settings.PUSHER_APP_ID,
+#	      key=settings.PUSHER_KEY,
+#	      secret=settings.PUSHER_SECRET
+#	    )
+#	return pusher_instance
 
-
-def callback(ch, method, properties, body):
-	payload = body.loads(body)
-	channel = payload['channel']
-	event = payload['event']
-	data = payload['data']
-	pusher_instance[channel].trigger(event, data)
+#def callback(ch, method, properties, body):
+#	payload = body.loads(body)
+#	channel = payload['channel']
+#	event = payload['event']
+#	data = payload['data']
+#	pusher_instance[channel].trigger(event, data)
 
 
 #def send_events():

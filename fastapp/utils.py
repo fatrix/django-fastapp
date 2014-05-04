@@ -6,6 +6,7 @@ import StringIO
 import hashlib
 import pika
 import sys
+import pusher
 from django.contrib import messages
 from django.conf import settings
 from dropbox.rest import ErrorResponse
@@ -153,14 +154,22 @@ def send_client(channel_name, event, data):
     logger.info("END EVENT_TO_QUEUE %s" % event)
 
 
-import fastapp 
 def get_pusher():
+    pusher_instance = None
+    if pusher_instance is None:
+        print "get_pusher"
+        pusher_instance = pusher.Pusher(
+          app_id=settings.PUSHER_APP_ID,
+          key=settings.PUSHER_KEY,
+          secret=settings.PUSHER_SECRET
+        )
     #p = pusher.Pusher(
     #  app_id=settings.PUSHER_APP_ID,
     #  key=settings.PUSHER_KEY,
     #  secret=settings.PUSHER_SECRET
     #)
-    return fastapp.pusher_instance
+    print pusher_instance
+    return pusher_instance
 
 def user_message(level, channel_name, message):
 
