@@ -1,4 +1,4 @@
-__version__ = "0.402"
+__version__ = "0.41"
 
 import pusher
 import pika
