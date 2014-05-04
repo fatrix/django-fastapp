@@ -40,8 +40,6 @@ class ApyViewSet(viewsets.ModelViewSet):
         obj.base = Base.objects.get(id=self.kwargs['base_pk'], user=self.request.user)
 
     def post_save(self, obj, created=False):
-        print "SAVE"
-        print self.request.user.username
         info(self.request.user.username, "Apy saved")
 
     def clone(self, request, base_pk, pk):
@@ -67,6 +65,19 @@ class BaseViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Base.objects.filter(user=self.request.user)
+
+    def start(self, request, pk):
+        print "starting %s" % pk
+        base = self.get_queryset().get(id=pk)
+        base.start()
+        #return Response()
+        return self.retrieve(request, pk=pk)
+
+    def stop(self, request, pk):
+        print "stopping %s" % pk
+        base = self.get_queryset().get(id=pk)
+        base.stop()
+        return self.retrieve(request, pk=pk)
 
     @link()
     def apy(self, request, pk=None):

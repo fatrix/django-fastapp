@@ -1,10 +1,8 @@
 import logging
 import traceback
 import json
-import copy
 import dropbox
-import datetime
-from bunch import Bunch
+import time
 
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
@@ -20,17 +18,20 @@ from django.views.generic.base import ContextMixin
 from django.conf import settings
 from django.views.generic import TemplateView
 from django.views.decorators.cache import never_cache
-from django.db.models import F
+from django.core import serializers
 from dropbox.rest import ErrorResponse
 from fastapp.utils import message
 from fastapp import __version__ as version
 
 from utils import UnAuthorized, Connection, NoBasesFound
 from utils import info, error, warn, channel_name_for_user, debug, send_client
-from fastapp.models import AuthProfile, Base, Apy, Setting, Counter
+from fastapp.queue import generate_vhost_configuration
+from fastapp.models import AuthProfile, Base, Apy, Setting, Executor
+from fastapp import responses
 
-from django.views.decorators.cache import never_cache
 from django.core.cache import cache
+
+from fastapp.executors.remote import call_rpc_client
 
 logger = logging.getLogger(__name__)
 
@@ -92,97 +93,136 @@ class DjendMixin(object):
 class DjendExecView(View, DjendMixin):
     STATE_OK = "OK"
     STATE_NOK = "NOK"
+    STATE_NOT_FOUND = "NOT_FOUND"
+    STATE_TIMEOUT = "TIMEOUT"
 
 
-    def _do(self, sfunc, do_kwargs):
-        exception = None;  returned = None
-        status = self.STATE_OK
-
-        #import pdb; pdb.set_trace()
-        func = None 
-
-        request = do_kwargs['request']
-        logger.info("do %s" % request)
-        username = copy.copy(do_kwargs['request'].user.username)
-
-        # debug incoming request
-        if request.method == "GET":
-            query_string = copy.copy(request.GET)
-        else:
-            query_string = copy.copy(request.POST)
-        try:
-            query_string.pop('json')
-        except KeyError, e:
-            logger.exception("invalid request")
-
-        user = channel_name_for_user(request)
-        debug(user, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
-
-        try:
-
-            exec sfunc
-            func.username=username
-            func.channel=channel_name_for_user(request)
-            func.request=do_kwargs['request']
-            func.session=do_kwargs['request'].session
-
-            func.name = do_kwargs['exec_name']
-
-            # attach GET and POST data
-            func.GET=copy.deepcopy(request.GET)
-            func.POST=copy.deepcopy(request.POST)
-
-            # attach log functions
-            func.info=info
-            func.debug=debug
-            func.warn=warn
-            func.error=error
-
-            # attatch settings
-            setting_dict = do_kwargs['base_model'].setting.all().values('key', 'value')
-            setting_dict1 = Bunch()
-            for setting in setting_dict:
-                setting_dict1.update({setting['key']: setting['value']})
-            setting_dict1.update({'STATIC_DIR': "/%s/%s/static" % ("fastapp", do_kwargs['base_model'].name)})
-            func.settings = setting_dict1
-
-            returned = func(func)
-
-        except Exception, e:
-            exception = "%s: %s" % (type(e).__name__, e.message)
-            traceback.print_exc()
-            status = self.STATE_NOK
-        return {"status": status, "returned": returned, "exception": exception}
+#    def _do(self, sfunc, do_kwargs):
+#        exception = None;  returned = None
+#        status = self.STATE_OK
+#
+#        func = None 
+#
+#        request = do_kwargs['request']
+#        logger.info("do %s %s" % request.method, request.path_info)
+#        username = copy.copy(do_kwargs['request'].user.username)
+#
+#        # debug incoming request
+#        if request.method == "GET":
+#            query_string = copy.copy(request.GET)
+#        else:
+#            query_string = copy.copy(request.POST)
+#        try:
+#            query_string.pop('json')
+#        except KeyError, e:
+#            logger.exception("invalid request")
+#
+#        user = channel_name_for_user(request)
+#        debug(user, "%s-Request received, URI %s?%s " % (request.method, request.path, query_string.urlencode()))
+#
+#        try:
+#
+#            exec sfunc
+#            func.username=username
+#            func.channel=channel_name_for_user(request)
+#            func.request=do_kwargs['request']
+#            func.session=do_kwargs['request'].session
+#
+#            func.name = do_kwargs['exec_name']
+#
+#            # attach GET and POST data
+#            func.GET=copy.deepcopy(request.GET)
+#            func.POST=copy.deepcopy(request.POST)
+#
+#            # attach log functions
+#            func.info=info
+#            func.debug=debug
+#            func.warn=warn
+#            func.error=error
+#
+#            # attatch settings
+#            setting_dict = do_kwargs['base_model'].setting.all().values('key', 'value')
+#            setting_dict1 = Bunch()
+#            for setting in setting_dict:
+#                setting_dict1.update({setting['key']: setting['value']})
+#            setting_dict1.update({'STATIC_DIR': "/%s/%s/static" % ("fastapp", do_kwargs['base_model'].name)})
+#            func.settings = setting_dict1
+#
+#            returned = func(func)
+#
+#
+#        except Exception, e:
+#            exception = "%s: %s" % (type(e).__name__, e.message)
+#            traceback.print_exc()
+#            status = self.STATE_NOK
+#        return {"status": status, "returned": returned, "exception": exception}
 
     def get(self, request, *args, **kwargs):
+        # get base
         base = kwargs['base']
-        exec_id = kwargs['id']
         base_model = get_object_or_404(Base, name=base)
+
+        # exec id
+        exec_id = kwargs['id']
+
+        # get exec from database
         try:
             exec_model = base_model.apys.get(name=exec_id)
         except Apy.DoesNotExist:
             warn(channel_name_for_user(request), "404 on %s" % request.META['PATH_INFO'])
-            return HttpResponseNotFound("404 on %s" % request.META['PATH_INFO'])
+            return HttpResponseNotFound("404 on %s"     % request.META['PATH_INFO'])
 
-        do_kwargs = {'request': request, 'base_model': base_model, 'exec_name': exec_id}
+        user = channel_name_for_user(request)
+        debug(user, "%s-Request received, URI %s" % (request.method, request.path))
+
+        apy_data = serializers.serialize("json", [exec_model], fields=('base_id', 'name'))
+        struct = json.loads(apy_data)
+        apy_data = json.dumps(struct[0])
+        rpc_request_data = {}
+        rpc_request_data.update({'model': apy_data, 
+                'base_name': base_model.name,
+            })
+        rpc_request_data.update({'request': 
+                { 
+                'method': request.method,
+                'GET': request.GET.__dict__,
+                'POST': request.POST.__dict__,
+                'session': request.session.session_key,
+                'user': {'username': request.user.username},
+                'REMOTE_ADDR': request.META.get('REMOTE_ADDR')
+                }
+            })
         try:
-            data = self._do(exec_model.module, do_kwargs)
+            # _do on remote
+            start = int(round(time.time() * 1000))
+            response_data = call_rpc_client(json.dumps(rpc_request_data), 
+                #"/", "guest", "guest")
+                generate_vhost_configuration(self.request.user.username, base_model.name), self.request.user.username,  self.request.user.username)
+            end = int(round(time.time() * 1000))
+            ms=str(end-start)
+
+            logger.info("RESPONSE-time: %sms" %  str(ms))
+            logger.debug("RESPONSE-data: %s" % response_data[:120])
+            data = json.loads(response_data)
         except Exception, e:
             logger.exception(e)
-            exec_model.mark_failed()
-            error(channel_name_for_user(request), e.msg)
-            return HttpResponseServerError(e.msg)
+            raise HttpResponseServerError(e)
 
         # add exec's id to the response dict
-        data.update({"id": kwargs['id']})
+        # add duration of rpc call
+        data.update({
+            "id": kwargs['id'],
+            "time_ms": ms,
+            })
 
+        response_class = data.get("response_class", None)
         # respond with json
         if request.GET.has_key('json') or request.GET.has_key('callback'):
             user = channel_name_for_user(request)
             if data["status"] == "OK":
                 info(user, str(data))
                 exec_model.mark_executed()
-            elif data["status"] == "NOK":
+            elif data["status"] in [self.STATE_NOK, self.STATE_NOT_FOUND, self.STATE_TIMEOUT]:
                 error(user, str(data))
                 exec_model.mark_failed()
 
@@ -194,10 +234,8 @@ class DjendExecView(View, DjendMixin):
                     },
                 'apy_id': exec_model.id 
             }
-            print exec_model.counter.failed
-            print cdata
-            send_client(request, "counter", cdata)
-
+            user = channel_name_for_user(request)
+            send_client(user, "counter", cdata)
 
             # the exec can return an HttpResponseRedirect object, where we redirect
             if isinstance(data['returned'], HttpResponseRedirect):
@@ -210,16 +248,29 @@ class DjendExecView(View, DjendMixin):
                     return HttpResponse(data, "application/javascript")
                 return HttpResponse(json.dumps(data), content_type="application/json")
 
+        # real response
+        elif response_class:
+            if response_class == u''+responses.XMLResponse.__name__:
+                content_type = json.loads(data['returned'])['content_type']
+                content = json.loads(data['returned'])['content']
+            elif response_class == u''+responses.HTMLResponse.__name__:
+                content_type = json.loads(data['returned'])['content_type']
+                content = json.loads(data['returned'])['content']
+            else:
+                return HttpResponseServerError()
+            return HttpResponse(content, content_type)
 
-        return HttpResponse(data['returned'])
+        return HttpResponseServerError()
+
+        #return HttpResponse(data['returned'])
 
     @csrf_exempt
     def post(self, request, *args, **kwargs):
-            DjendExecView.get(self, request, args, kwargs)
+        return DjendExecView.get(self, request, *args, **kwargs)
 
-    @csrf_exempt
-    def dispatch(self, *args, **kwargs):
-        return super(DjendExecView, self).dispatch(*args, **kwargs)
+    #@csrf_exempt
+    #def dispatch(self, *args, **kwargs):
+    #    return super(DjendExecView, self).dispatch(*args, **kwargs)
 
 class DjendSharedView(View, ContextMixin):
 
@@ -256,7 +307,6 @@ class DjendSharedView(View, ContextMixin):
 #class DjendMessageView(View):
 #
 #    def post(self, request, *args, **kwargs):
-#        print request.POST
 #        info(request.user.username, request.POST)
 #        return HttpResponse()
 #
@@ -264,37 +314,37 @@ class DjendSharedView(View, ContextMixin):
 #    def dispatch(self, *args, **kwargs):
 #        return super(DjendMessageView, self).dispatch(*args, **kwargs)
 
-MODULE_DEFAULT_CONTENT = """def func(self):\n    pass"""
+#MODULE_DEFAULT_CONTENT = """def func(self):\n\tpass"""
 
-class DjendExecSaveView(View):
-
-    def post(self, request, *args, **kwargs):
-        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user))
-
-        # syncing to storage provider
-        # exec
-        if request.POST.has_key('exec_name'):
-            exec_name = request.POST.get('exec_name')
-            # save in database
-            #e = base.execs.get(name=exec_name)
-            try:
-                e, created = Apy.objects.get_or_create(name=exec_name, base=base)
-                if not created:
-                    warn(channel_name_for_user(request), "Exec '%s' does already exist" % exec_name)
-                    return HttpResponseBadRequest()
-                else:
-                    e.module = MODULE_DEFAULT_CONTENT
-                    e.save()
-            except Exception, e:
-                error(channel_name_for_user(request), "Error saving Exec '%s'" % exec_name)
-                return HttpResponseBadRequest(e)
-        # base
-
-        return HttpResponse('{"redirect": %s}' % request.META['HTTP_REFERER'])
-
-    @csrf_exempt
-    def dispatch(self, *args, **kwargs):
-        return super(DjendExecSaveView, self).dispatch(*args, **kwargs) 
+#class DjendExecSaveView(View):
+#
+#    def post(self, request, *args, **kwargs):
+#        base = get_object_or_404(Base, name=kwargs['base'], user=User.objects.get(username=request.user))
+#
+#        # syncing to storage provider
+#        # exec
+#        if request.POST.has_key('exec_name'):
+#            exec_name = request.POST.get('exec_name')
+#            # save in database
+#            #e = base.execs.get(name=exec_name)
+#            try:
+#                e, created = Apy.objects.get_or_create(name=exec_name, base=base)
+#                if not created:
+#                    warn(channel_name_for_user(request), "Exec '%s' does already exist" % exec_name)
+#                    return HttpResponseBadRequest()
+#                else:
+#                    e.module = MODULE_DEFAULT_CONTENT
+#                    e.save()
+#            except Exception, e:
+#                error(channel_name_for_user(request), "Error saving Exec '%s'" % exec_name)
+#                return HttpResponseBadRequest(e)
+#        # base
+#
+#        return HttpResponse('{"redirect": %s}' % request.META['HTTP_REFERER'])
+#
+#    @csrf_exempt
+#    def dispatch(self, *args, **kwargs):
+#        return super(DjendExecSaveView, self).dispatch(*args, **kwargs) 
 
 class DjendBaseCreateView(View):
 
@@ -366,7 +416,6 @@ class DjendExecDeleteView(View):
         # syncing to storage provider
         # exec
         e = base.apys.get(name=kwargs['id'])
-        print e.delete()
         try:
             e.delete()
             info(request.user.username, "Exec '%s' deleted" % e.exec_name)
@@ -412,7 +461,6 @@ class DjendBaseSaveView(View):
             else:    
                 e.module = content
                 e.description = request.POST.get('exec_description')
-                print e.description
                 e.save()
                 info(channel_name_for_user(request), "Exec '%s' saved" % exec_name)
         # base

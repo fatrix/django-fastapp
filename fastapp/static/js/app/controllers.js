@@ -23,7 +23,7 @@ config(['PusherServiceProvider',
   }
 ]);
 
-window.app.controller('BasesCtrl', ['$scope', 'Bases', 'Apy', function($scope, Bases, Apy) {
+window.app.controller('BasesCtrl', ['$scope', 'Bases', 'Base', 'Apy', function($scope, Bases, Base, Apy) {
   $scope.init = function() {
     var bases = Bases.all(function() {
       angular.forEach(bases, function(base) {
@@ -31,6 +31,23 @@ window.app.controller('BasesCtrl', ['$scope', 'Bases', 'Apy', function($scope, B
       });
       $scope.bases = bases;
     });
+  };
+
+  $scope.cycle_state = function(base) {
+    console.log(base);
+    if (base.state) {
+      Base.stop({baseId: base.id}, base, function(data) {
+        console.log(data);
+        base.state = false;
+      });
+    }
+    if (! base.state) {
+      Base.start({baseId: base.id}, base, function(data) {
+        console.log(data);
+        base.state = true;
+        base.pids = data['pids'];
+      });
+    }
   };
 }]);
 

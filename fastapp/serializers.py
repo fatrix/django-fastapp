@@ -24,9 +24,11 @@ class SettingSerializer(serializers.ModelSerializer):
         fields = ('id', 'key', 'value')
 
 class BaseSerializer(serializers.ModelSerializer):
+    apy = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    state = serializers.Field()
+    pids = serializers.Field()
+
     class Meta:
         model = Base
-        fields = ('id', 'name', 'uuid')
-    #apy = serializers.HyperlinkedRelatedField(many=True, view_name='apy-detail', read_only=True)
-    apy = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-
+        #fields = ('id', 'name', 'uuid')
+        fields = ('id', 'name', 'state', 'uuid', 'pids')

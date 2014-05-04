@@ -1,19 +1,29 @@
 import urllib
 import ConfigParser
 import io
+import subprocess
+import os
+import sys
+import signal
 import StringIO
 import gevent
+import json
 
 from django.db import models
 from django.contrib.auth.models import User
 from django.template import Template
-from django_extensions.db.fields import UUIDField
-from django.db.models.signals import post_save, post_delete, pre_save
+from django_extensions.db.fields import UUIDField, ShortUUIDField
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import F
-from django.db.transaction import set_autocommit, commit, rollback, commit_on_success
-from fastapp.utils import Connection, NotFound
+from django.db.transaction import commit_on_success
+from django.conf import settings
+from fastapp.queue import generate_vhost_configuration
+from fastapp.executors.remote import distribute, CONFIGURATION_QUEUE, SETTING_QUEUE
 
+from django.core import serializers
+
+from fastapp.utils import Connection
 
 import logging
 logger = logging.getLogger(__name__)
@@ -41,6 +51,7 @@ class Base(models.Model):
 
     @property
     def shared(self):
+        print self.uuid
         return "/fastapp/%s/index/?shared_key=%s" % (self.name, urllib.quote(self.uuid))
 
     @property
@@ -56,6 +67,7 @@ class Base(models.Model):
 
 
     def refresh(self, put=False):
+        from fastapp.utils import Connection, NotFound
         connection = Connection(self.user.authprofile.access_token)
         template_name = "%s/index.html" % self.name
         #if put:
@@ -67,6 +79,7 @@ class Base(models.Model):
         self.content = template_content
 
     def refresh_execs(self, exec_name=None, put=False):
+        from fastapp.utils import Connection, NotFound
         # execs
         connection = Connection(self.user.authprofile.access_token)
         app_config = "%s/app.config" % self.name
@@ -106,6 +119,28 @@ class Base(models.Model):
         t = Template(self.content)
         return t.render(context)
 
+    @property
+    def state(self):
+        try:
+            return self.executor.is_running()
+        except IndexError, e:
+            return False
+
+    @property
+    def pids(self):
+        try:
+            if self.executor.pid is None:
+                return []
+            return [self.executor.pid]
+        except Exception, e:
+            return []
+
+    def start(self):
+        return self.executor.start()
+
+    def stop(self):
+        return self.executor.stop()
+
     def __str__(self):
         return "<Base: %s>" % self.name
 
@@ -142,7 +177,59 @@ class Setting(models.Model):
     key = models.CharField(max_length=128)
     value = models.CharField(max_length=8192)
 
+class Instance(models.Model):
+    is_alive = models.BooleanField(default=False)
+    uuid = ShortUUIDField(auto=True)
+    last_beat = models.DateTimeField(auto_now=True)
+    executor = models.ForeignKey("Executor", related_name="instances")
 
+class Host(models.Model):
+    name = models.CharField(max_length=50)
+
+class Executor(models.Model):
+    base = models.OneToOneField(Base, related_name="executor")
+    num_instances = models.IntegerField(default=1)
+    pid = models.CharField(max_length=10, null=True)
+    #host = models.ForeignKey(Host)
+
+    def start(self):
+        print "Start manage.py start_worker"
+        from queue import create_vhost
+        create_vhost(self.base)
+
+        try:
+            Instance.objects.get(executor=self)
+        except Instance.DoesNotExist, e:
+            instance = Instance(executor=self)
+            instance.save()
+        
+        python_path = sys.executable
+        p = subprocess.Popen("%s manage.py start_worker --settings=envs.local --base=%s --username=%s --password=%s" % (python_path, 
+            self.base.name, 
+            self.base.user.username, self.base.user.username),
+            cwd=settings.PROJECT_ROOT,
+            shell=True, stdin=None, stdout=None, stderr=None)
+        self.pid = p.pid
+        print "Subprocess started with pid %s" % self.pid
+        self.save()
+
+    def stop(self):
+        print "kill process with PID %s" % self.pid
+        os.kill(int(self.pid), signal.SIGTERM)
+        if not self.is_running():
+            self.pid = None
+            self.save()
+
+    def is_running(self):
+        # if no pid, return directly false
+        if not self.pid:
+            return False
+
+        # if pid, check
+        return (subprocess.call("/bin/ps -ef|egrep -v grep|egrep -c %s 1>/dev/null" % self.pid, shell=True)==0)
+
+    def is_alive(self):
+        return self.instances.count()>1
 
 @receiver(post_save, sender=Base)
 def initialize_on_storage(sender, *args, **kwargs):
@@ -168,23 +255,43 @@ def synchronize_to_storage(sender, *args, **kwargs):
     except Exception, e:
         logger.exception("error in synchronize_to_storage")
 
-    print args
-    print kwargs
-
     if kwargs.get('created'):
         counter = Counter(apy=instance)
         counter.save()
-        print Counter.objects.all()
 
+    distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]), 
+        generate_vhost_configuration(instance.base.user.username, instance.base.name), 
+        instance.base.user.username, 
+        instance.base.user.username
+    )
+
+@receiver(post_save, sender=Setting)
+def send_to_workers(sender, *args, **kwargs):
+    instance = kwargs['instance']
+    distribute(SETTING_QUEUE, json.dumps({instance.key: instance.value}), 
+        generate_vhost_configuration(instance.base.user.username, instance.base.name), 
+        instance.base.user.username, 
+        instance.base.user.username
+    )
 
 @receiver(post_save, sender=Base)
 def synchronize_base_to_storage(sender, *args, **kwargs):
     instance = kwargs['instance']
+
+    # create executor instance if none
     try:
-        connection = Connection(instance.user.authprofile.access_token)
-        gevent.spawn(connection.put_file("%s/index.html" % instance.name, instance.content))
-    except Exception, e:
-        logger.exception("error in synchronize_base_to_storage")
+        print instance.executor
+    except Executor.DoesNotExist, e:
+        print "create executor"
+        executor = Executor(base=instance)
+        print executor.save()
+                
+
+    #try:
+    #    connection = Connection(instance.user.authprofile.access_token)
+    #    gevent.spawn(connection.put_file("%s/index.html" % instance.name, instance.content))
+    #except Exception, e:
+    #    logger.exception("error in synchronize_base_to_storage")
 
 @receiver(post_delete, sender=Base)
 def base_to_storage_on_delete(sender, *args, **kwargs):

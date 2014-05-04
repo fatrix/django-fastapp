@@ -7,10 +7,12 @@ baseServices.factory('Bases', ['$resource', function($resource){
       create: {method:'POST', params:{baseId: 'baseId'}, isArray:false}
    });
  }]);
-baseServices.factory('Base', ['$resource', function($resource){
+baseServices.factory('Base', ['$resource', '$cookies', function($resource, $cookies){
     return $resource('api/base/:baseId/', {}, {
       get: {method:'GET', params:{baseId: 'baseId'}, isArray:true},
-      update: {method:'PUT', params:{baseId: 'baseId'}, isArray:false}
+      update: {method:'PUT', params:{baseId: 'baseId'}, isArray:false},
+      start: {method:'POST', params:{baseId: 'baseId'}, isArray:false, headers:{'X-CSRFToken': $cookies.csrftoken}, url:'api/base/:baseId/start\\/'},
+      stop: {method:'POST', params:{baseId: 'baseId'}, isArray:false, headers:{'X-CSRFToken': $cookies.csrftoken}, url:'api/base/:baseId/stop\\/'},
    });
  }]);
 
@@ -21,6 +23,7 @@ baseServices.factory('Apy', ['$resource', '$cookies', function($resource, $cooki
       create: {method:'POST', params:{baseId: 'id'}, isArray:false, headers:{'X-CSRFToken': $cookies.csrftoken}},
    });
 }]);
+
 // apy
 baseServices.factory('Apy1', ['$resource', '$cookies', function($resource, $cookies){
     return $resource('/fastapp/api/base/:baseId/apy/:id\\/', {}, {
