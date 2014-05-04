@@ -15,7 +15,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         THREAD_COUNT = FASTAPP_HEARTBEAT_LISTENER_THREADCOUNT
         threads = []
-        for c in range(1, THREAD_COUNT):
+        for c in range(0, THREAD_COUNT):
                 thread = HeartbeatThread(c, "HeartbeatThread-%s" % c, c, None, receiver=True)
                 self.stdout.write('Start HeartbeatThread')
                 threads.append(thread)

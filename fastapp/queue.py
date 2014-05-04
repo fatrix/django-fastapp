@@ -2,15 +2,15 @@ import logging
 import subprocess
 import traceback
 import sys
+import urllib
 
-from fastapp.defaults import *
 
 logger = logging.getLogger(__name__)
 
 
 def generate_vhost_configuration(*args):
     separator = "-"
-    return separator.join(list(args))
+    return "/"+separator.join(list(args))
 
 def create_vhosts():
 	print "create_vhosts"
@@ -19,11 +19,13 @@ def create_vhosts():
 	for base in Base.objects.all():
 		create_vhost(base)
 
+def create_broker_url(username, password, host, port, vhost):
+	return "amqp://%s:%s@%s:%s/%s" % (username, password, host, port, vhost)
+
 
 def create_vhost(base):
-	print "create_vhost"
-	from models import Base 
     # create the vhosts, users and permissions
+	from models import Base 
 	vhost = generate_vhost_configuration(base.user.username, base.name)
 	logger.info("Create vhost configuration: %s" % vhost)
 	print "Create vhost configuration: %s" % vhost

@@ -23,6 +23,7 @@ from fastapp.executors.remote import distribute, CONFIGURATION_QUEUE, SETTING_QU
 
 from django.core import serializers
 
+from fastapp.utils import Connection
 
 import logging
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ class AuthProfile(models.Model):
 
 class Base(models.Model):
     name = models.CharField(max_length=32)
+    uuid = UUIDField(auto=True)
     content = models.CharField(max_length=8192, blank=True, default=index_template)
     user = models.ForeignKey(User, related_name='+', default=0, blank=True)
     public = models.BooleanField(default=False)
@@ -49,6 +51,7 @@ class Base(models.Model):
 
     @property
     def shared(self):
+        print self.uuid
         return "/fastapp/%s/index/?shared_key=%s" % (self.name, urllib.quote(self.uuid))
 
     @property
@@ -193,6 +196,12 @@ class Executor(models.Model):
         print "Start manage.py start_worker"
         from queue import create_vhost
         create_vhost(self.base)
+
+        try:
+            Instance.objects.get(executor=self)
+        except Instance.DoesNotExist, e:
+            instance = Instance(executor=self)
+            instance.save()
         
         python_path = sys.executable
         p = subprocess.Popen("%s manage.py start_worker --settings=envs.local --base=%s --username=%s --password=%s" % (python_path, 

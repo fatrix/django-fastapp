@@ -27,6 +27,7 @@ from utils import UnAuthorized, Connection, NoBasesFound
 from utils import info, error, warn, channel_name_for_user, debug, send_client
 from fastapp.queue import generate_vhost_configuration
 from fastapp.models import AuthProfile, Base, Apy, Setting, Executor
+from fastapp import responses
 
 from django.core.cache import cache
 
@@ -161,8 +162,6 @@ class DjendExecView(View, DjendMixin):
         base = kwargs['base']
         base_model = get_object_or_404(Base, name=base)
 
-
-
         # exec id
         exec_id = kwargs['id']
 
@@ -172,15 +171,6 @@ class DjendExecView(View, DjendMixin):
         except Apy.DoesNotExist:
             warn(channel_name_for_user(request), "404 on %s" % request.META['PATH_INFO'])
             return HttpResponseNotFound("404 on %s"     % request.META['PATH_INFO'])
-
-        #do_kwargs = {'request': request, 'base_model': base_model, 'exec_name': exec_id}
-        #try:
-        #    data = self._do(exec_model.module, do_kwargs)
-        #except Exception, e:
-        #    logger.exception(e)
-        #    exec_model.mark_failed()
-        #    error(channel_name_for_user(request), e.msg)
-        #    return HttpResponseServerError(e.msg)
 
         user = channel_name_for_user(request)
         debug(user, "%s-Request received, URI %s" % (request.method, request.path))
@@ -213,10 +203,10 @@ class DjendExecView(View, DjendMixin):
 
             logger.info("RESPONSE-time: %sms" %  str(ms))
             logger.debug("RESPONSE-data: %s" % response_data[:120])
-            #print response_data
             data = json.loads(response_data)
         except Exception, e:
-            print e
+            logger.exception(e)
+            raise HttpResponseServerError(e)
 
         # add exec's id to the response dict
         # add duration of rpc call
@@ -225,6 +215,7 @@ class DjendExecView(View, DjendMixin):
             "time_ms": ms,
             })
 
+        response_class = data.get("response_class", None)
         # respond with json
         if request.GET.has_key('json') or request.GET.has_key('callback'):
             user = channel_name_for_user(request)
@@ -257,16 +248,29 @@ class DjendExecView(View, DjendMixin):
                     return HttpResponse(data, "application/javascript")
                 return HttpResponse(json.dumps(data), content_type="application/json")
 
+        # real response
+        elif response_class:
+            if response_class == u''+responses.XMLResponse.__name__:
+                content_type = json.loads(data['returned'])['content_type']
+                content = json.loads(data['returned'])['content']
+            elif response_class == u''+responses.HTMLResponse.__name__:
+                content_type = json.loads(data['returned'])['content_type']
+                content = json.loads(data['returned'])['content']
+            else:
+                return HttpResponseServerError()
+            return HttpResponse(content, content_type)
 
-        return HttpResponse(data['returned'])
+        return HttpResponseServerError()
+
+        #return HttpResponse(data['returned'])
 
     @csrf_exempt
     def post(self, request, *args, **kwargs):
-            DjendExecView.get(self, request, args, kwargs)
+        return DjendExecView.get(self, request, *args, **kwargs)
 
-    @csrf_exempt
-    def dispatch(self, *args, **kwargs):
-        return super(DjendExecView, self).dispatch(*args, **kwargs)
+    #@csrf_exempt
+    #def dispatch(self, *args, **kwargs):
+    #    return super(DjendExecView, self).dispatch(*args, **kwargs)
 
 class DjendSharedView(View, ContextMixin):
 
