@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 import logging
 import sys
 
-from fastapp.executors.remote import HeartbeatThread
+from fastapp.executors.heartbeat import HeartbeatThread
 from fastapp.defaults import *
 
 logger = logging.getLogger("fastapp.executors.remote")

@@ -1,9 +1,8 @@
 import logging 
+import pika
+import sys
 import subprocess
 import traceback
-import sys
-import urllib
-
 
 logger = logging.getLogger(__name__)
 
@@ -39,3 +38,28 @@ def create_vhost(base):
 		print subprocess.Popen("%s set_permissions -p %s %s \"^.*\" \".*\" \".*\" " % (rabbitmqctl, vhost, base.user.username), shell=True)
 	except Exception, e:
 		traceback.print_exc()
+
+def connect_to_queuemanager(host="localhost", vhost="/", username="guest", password="guest"):
+    credentials = pika.PlainCredentials(username, password)
+    logger.info("Trying to connect to: %s, %s, %s, %s" % (host, vhost, username, password))
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, virtual_host=vhost, heartbeat_interval=20, credentials=credentials))
+    except Exception, e:
+        logger.exception(e)
+        raise e
+    return connection
+
+def connect_to_queue(host, queue, vhost="/", username="guest", password="guest"):
+    logger.info("Connect to %s" % queue)
+    try:
+        #connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost', virtual_host=vhost, heartbeat_interval=20))
+        connection = connect_to_queuemanager(host, vhost, username, password)
+        channel = connection.channel()
+        #d = channel.queue_declare(queue, durable=True)
+        d = channel.queue_declare(queue)
+        logger.info(d.method)
+        if d.method.__dict__['consumer_count']:
+            logger.error("No consumer on queue %s" % queue)
+    except Exception, e:
+        logger.exception(e)
+    return channel

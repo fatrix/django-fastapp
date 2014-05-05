@@ -106,31 +106,9 @@ def channel_name_for_user_by_user(user):
     return channel_name
 
 
-def connect_to_queuemanager(host="localhost", vhost="/", username="guest", password="guest"):
-    credentials = pika.PlainCredentials(username, password)
-    logger.info("Trying to connect to: %s, %s, %s, %s" % (host, vhost, username, password))
-    try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, virtual_host=vhost, heartbeat_interval=20, credentials=credentials))
-    except Exception, e:
-        logger.exception(e)
-        raise e
-    return connection
 
-def connect_to_queue(host, queue, vhost="/", username="guest", password="guest"):
-    logger.info("Connect to %s" % queue)
-    try:
-        #connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost', virtual_host=vhost, heartbeat_interval=20))
-        connection = connect_to_queuemanager(host, vhost, username, password)
-        channel = connection.channel()
-        #d = channel.queue_declare(queue, durable=True)
-        d = channel.queue_declare(queue)
-        logger.info(d.method)
-        if d.method.__dict__['consumer_count']:
-            logger.error("No consumer on queue %s" % queue)
-    except Exception, e:
-        logger.exception(e)
-    return channel
 
+from queue import connect_to_queue
 def send_client(channel_name, event, data):
     logger.info("START EVENT_TO_QUEUE %s" % event)
 
@@ -150,26 +128,10 @@ def send_client(channel_name, event, data):
                             delivery_mode=1,
                          ),
                         )
-    channel.basic_ack()
     logger.info("END EVENT_TO_QUEUE %s" % event)
 
 
-def get_pusher():
-    pusher_instance = None
-    if pusher_instance is None:
-        print "get_pusher"
-        pusher_instance = pusher.Pusher(
-          app_id=settings.PUSHER_APP_ID,
-          key=settings.PUSHER_KEY,
-          secret=settings.PUSHER_SECRET
-        )
-    #p = pusher.Pusher(
-    #  app_id=settings.PUSHER_APP_ID,
-    #  key=settings.PUSHER_KEY,
-    #  secret=settings.PUSHER_SECRET
-    #)
-    print pusher_instance
-    return pusher_instance
+
 
 def user_message(level, channel_name, message):
 
@@ -202,39 +164,19 @@ def error(username, gmessage):
 def warn(username, gmessage): 
         return user_message(logging.WARN, username, gmessage)
 
-def send_to_pusher(ch, method, props, body):
-    p = get_pusher()    
-    body = json.loads(body)
-
-    event = body['event']
-    channel = body['channel']
-    data = body['data']
-
-    p[channel].trigger(event, data)
-    ch.basic_ack(delivery_tag = method.delivery_tag)
-
-def consume(channel):
-    logger.info("Start consuming on pusher_events")
-    #channel = connect_to_queue('pusher_events')
-    channel.basic_qos(prefetch_count=1) 
-    channel.basic_consume(send_to_pusher, queue='pusher_events')
-    channel.start_consuming()
-    channel.basic_ack()
 
 
-
-def start_sender():
-    channel = connect_to_queue('localhost', 'pusher_events')
-    from threading import Thread
-    logger.info("Start thread for consume")
-    t = Thread(target=consume, args=(channel,))
-    t.daemon = True
-    t.start()
-    return t
-
-
+from console import PusherSenderThread
 if any(arg.startswith('run') for arg in sys.argv):
+    threads = []
     # create connection to pusher_queue
     logger.info("Start sending events to pusher")
-    t1 = start_sender()
+    for c in range(1, 3):
+        thread = PusherSenderThread(c, "PusherSenderThread-%s" % c, c, "/")
+        logger.debug('Start PusherSenderThread')
+        threads.append(thread)
+        thread.daemon = True
+        thread.start()
 
+# autostart
+#from fastapp.models import 
