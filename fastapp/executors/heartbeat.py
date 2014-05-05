@@ -4,9 +4,11 @@ import logging
 import time
 import json
 import sys
+from datetime import datetime, timedelta
 
 from django.core import serializers
 from fastapp.executors.remote import distribute
+from fastapp.models import Instance, Base
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +16,20 @@ HEARTBEAT_QUEUE = "heartbeat_queue"
 CONFIGURATION_QUEUE = "configuration"
 SETTING_QUEUE = "setting"
 
+
+def inactivate():
+    try:
+        while True:
+            time.sleep(0.1)
+            now=datetime.now()
+            for instance in Instance.objects.filter(last_beat__lte=now-timedelta(minutes=1), is_alive=True):
+                logger.info("inactive instance '%s' detected" % instance)
+                instance.mark_down()
+                instance.save()
+            time.sleep(10)
+    except Exception, e:
+        print e
+        pass
 
 
 class HeartbeatThread(threading.Thread):
@@ -146,6 +162,7 @@ class HeartbeatThread(threading.Thread):
         from fastapp.models import Instance
         instance = Instance.objects.get(executor__base__name=base)
         instance.is_alive = True
+        instance.last_beat = datetime.now()
         instance.save()
 
         if not data['in_sync']:

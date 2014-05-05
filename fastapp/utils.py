@@ -168,6 +168,9 @@ def warn(username, gmessage):
 
 from console import PusherSenderThread
 if any(arg.startswith('run') for arg in sys.argv):
+
+
+
     threads = []
     # create connection to pusher_queue
     logger.info("Start sending events to pusher")

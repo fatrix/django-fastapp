@@ -180,8 +180,12 @@ class Setting(models.Model):
 class Instance(models.Model):
     is_alive = models.BooleanField(default=False)
     uuid = ShortUUIDField(auto=True)
-    last_beat = models.DateTimeField(auto_now=True)
+    last_beat = models.DateTimeField()
     executor = models.ForeignKey("Executor", related_name="instances")
+
+    def mark_down(self):
+        self.is_alive = False
+        self.save()
 
 class Host(models.Model):
     name = models.CharField(max_length=50)
