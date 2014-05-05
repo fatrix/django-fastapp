@@ -3,7 +3,8 @@ import logging
 import sys
 from optparse import make_option
 
-from fastapp.executors.remote import ExecutorServerThread, HeartbeatThread
+from fastapp.executors.remote import ExecutorServerThread
+from fastapp.executors.heartbeat import HeartbeatThread
 from fastapp.queue import generate_vhost_configuration
 from fastapp.defaults import *
 

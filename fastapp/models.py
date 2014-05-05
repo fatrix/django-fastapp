@@ -180,8 +180,12 @@ class Setting(models.Model):
 class Instance(models.Model):
     is_alive = models.BooleanField(default=False)
     uuid = ShortUUIDField(auto=True)
-    last_beat = models.DateTimeField(auto_now=True)
+    last_beat = models.DateTimeField()
     executor = models.ForeignKey("Executor", related_name="instances")
+
+    def mark_down(self):
+        self.is_alive = False
+        self.save()
 
 class Host(models.Model):
     name = models.CharField(max_length=50)
@@ -193,7 +197,7 @@ class Executor(models.Model):
     #host = models.ForeignKey(Host)
 
     def start(self):
-        print "Start manage.py start_worker"
+        logger.info("Start manage.py start_worker")
         from queue import create_vhost
         create_vhost(self.base)
 
@@ -204,21 +208,26 @@ class Executor(models.Model):
             instance.save()
         
         python_path = sys.executable
-        p = subprocess.Popen("%s manage.py start_worker --settings=envs.local --base=%s --username=%s --password=%s" % (python_path, 
-            self.base.name, 
-            self.base.user.username, self.base.user.username),
-            cwd=settings.PROJECT_ROOT,
-            shell=True, stdin=None, stdout=None, stderr=None)
-        self.pid = p.pid
-        print "Subprocess started with pid %s" % self.pid
+        try:
+            p = subprocess.Popen("%s %s/manage.py start_worker --settings=envs.local --base=%s --username=%s --password=%s" % (python_path, 
+                settings.PROJECT_ROOT,
+                self.base.name, 
+                self.base.user.username, self.base.user.username),
+                cwd=settings.PROJECT_ROOT,
+                shell=True, stdin=None, stdout=None, stderr=None, preexec_fn=os.setsid)
+            self.pid = p.pid
+        except Exception, e:
+            logger.exception(e)
+            raise e
+        logger.info("%s: worker started with pid %s" % (self, self.pid))
         self.save()
 
     def stop(self):
-        print "kill process with PID %s" % self.pid
+        logger.info("kill process with PID %s" % self.pid)
         try:
-            os.kill(int(self.pid), signal.SIGTERM)
+            os.killpg(int(self.pid), signal.SIGTERM)
         except OSError, e:
-            pass
+            logger.exception(e)
         if not self.is_running():
             self.pid = None
             self.save()
@@ -233,6 +242,9 @@ class Executor(models.Model):
 
     def is_alive(self):
         return self.instances.count()>1
+
+    def __str__(self):
+        return "Executor %s-%s" % (self.base.user.username, self.base.name)
 
 @receiver(post_save, sender=Base)
 def initialize_on_storage(sender, *args, **kwargs):

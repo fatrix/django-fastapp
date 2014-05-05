@@ -5,11 +5,8 @@ import copy
 import logging
 import threading
 import traceback
-import time
 from bunch import Bunch
-from django.core import serializers
-from fastapp.utils import connect_to_queuemanager
-#from fastapp.models import Apy
+from fastapp.queue import connect_to_queuemanager
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +78,11 @@ def call_rpc_client(apy, vhost, username, password):
         def on_response(self, ch, method, props, body):
             if self.corr_id == props.correlation_id:
                 self.response = body
+                logger.debug("from rpc queue: "+body)
                 #print int(round(time.time() * 1000))
 
         def call(self, n):
+            logger.debug("to rpc queue: "+n)
             self.connection.add_timeout(3, self.on_timeout)
             self.response = None
             self.corr_id = str(uuid.uuid4())
@@ -117,7 +116,6 @@ threads = []
 CONFIGURATION_QUEUE = "configuration"
 SETTING_QUEUE = "setting"
 RPC_QUEUE = "rpc_queue"
-HEARTBEAT_QUEUE = "heartbeat_queue"
 
 class ExecutorServerThread(threading.Thread):
     def __init__(self, threadID, name, counter, vhost, username, password):
@@ -197,7 +195,7 @@ class ExecutorServerThread(threading.Thread):
                     response_data = _do(json.loads(body), self.functions, self.settings)
 
                 except Exception, e:
-                    print e
+                    logger.exception(e)
                 finally:
                     ch.basic_publish(exchange='',
                                      routing_key=props.reply_to,
@@ -219,114 +217,6 @@ class ExecutorServerThread(threading.Thread):
             logger.error("Connection closed")
             logger.exception(e)
 
-class HeartbeatThread(threading.Thread):
-
-    def __init__(self, threadID, name, counter, vhost, receiver=False):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
-        self.name = name
-        self.counter = counter
-        self.receiver = receiver
-
-        self.vhost = vhost
-
-        self.in_sync = False
-
-    def run(self):
-        self.parameters = pika.ConnectionParameters(host="localhost", heartbeat_interval=3)
-        print "Starting " + self.name
-
-        if self.receiver:
-            self.on_queue_declared = self.consume_on_queue_declared
-        else:
-            self.on_queue_declared = self.produce_on_queue_declared
-        print self.on_queue_declared
-
-        while True:
-            try:
-                connection = pika.SelectConnection(self.parameters, self.on_connected)
-                logger.info('connected')
-            except Exception:
-                logger.warning('cannot connect', exc_info=True)
-                time.sleep(10)
-                continue
-
-            try:
-                connection.ioloop.start()
-            finally:
-                try:
-                    connection.close()
-                    connection.ioloop.start() # allow connection to close
-                except Exception, e:
-                    logger.error("Heartbeat thread lost connection")
-                    logger.exception(e)
-
-    def consume_on_queue_declared(self, frame):
-        logger.info("consume on queue declared")
-        self.channel.basic_consume(self.on_beat, queue=HEARTBEAT_QUEUE, no_ack=True)
-
-    def produce_on_queue_declared(self, frame):
-        logger.info("produce on queue declared")
-        while True:
-            logger.info("Sending Heartbeat from %s" % self.vhost)
-            self.channel.basic_publish(exchange='',
-                    routing_key=HEARTBEAT_QUEUE,
-                    properties=pika.BasicProperties(
-                        #delivery_mode=1,
-                        #reply_to = self.callback_queue,
-                        #correlation_id = self.corr_id,
-                    ),
-                    body=json.dumps({
-                        'in_sync': self.in_sync,
-                        'vhost': self.vhost 
-                        }))
-            self.in_sync = True
-            time.sleep(10)
-
-    def on_connected(self, connection):
-        print "on connected"
-        connection.channel(self.on_channel_open)
-
-    def on_channel_open(self, channel):
-        print "on channel open"
-        channel.queue_declare(queue=HEARTBEAT_QUEUE, callback=self.on_queue_declared)
-
-        self.channel = channel
-
-    def on_beat(self, ch, method, props, body):
-        data = json.loads(body)
-        vhost = data['vhost']
-        base = vhost.split("-")[1]
-
-        logger.info("heartbeat received from %s" % vhost)
-
-        # store timestamp in DB
-        from fastapp.models import Instance
-        instance = Instance.objects.get(executor__base__name=base)
-        instance.is_alive = True
-        instance.save()
-
-        if not data['in_sync']:
-            logger.info("run sync")
-            from fastapp.models import Apy, Setting
-            for instance in Apy.objects.filter(base__name=base):
-                distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]), 
-                    #"philipsahli-aaaa", 
-                    vhost,
-                    "philipsahli", 
-                    "philipsahli"
-                    )
-
-            for instance in Setting.objects.filter(base__name=base):
-                distribute(SETTING_QUEUE, json.dumps({
-                    instance.key: instance.value
-                    }), 
-                    vhost,
-                    "philipsahli", 
-                    "philipsahli"
-                )
-        #ch.basic_ack(delivery_tag=method.delivery_tag)
-        #logger.info("ack")
 
 
 
@@ -347,6 +237,8 @@ def _do(data, functions=None, settings=None):
         base_name = data['base_name']
         model = json.loads(data['model'])
 
+        response_class = None
+
         # worker does not know apy
         if not functions.has_key(model['fields']['name']):
             status = STATE_NOT_FOUND
@@ -363,11 +255,8 @@ def _do(data, functions=None, settings=None):
                 query_string = copy.copy(request['GET'])
             else:
                 query_string = copy.copy(request['POST'])
-            #try:
-            #    query_string.pop('json')
-            #except KeyError, e:
-            #    logger.exception("invalid request")
-            response_class = None
+
+            logger.debug("START DO")
             try:
 
                 #exec model['fields']['module']
@@ -410,6 +299,8 @@ def _do(data, functions=None, settings=None):
             except Exception, e:
                 exception = "%s: %s" % (type(e).__name__, e.message)
                 traceback.print_exc()
+                logger.exception(e)
                 status = STATE_NOK
+            logger.debug("END DO")
         return_data = {"status": status, "returned": returned, "exception": exception, "response_class": response_class}
         return return_data

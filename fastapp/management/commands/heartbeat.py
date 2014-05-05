@@ -1,8 +1,10 @@
-from django.core.management.base import BaseCommand
 import logging
 import sys
+import threading
 
-from fastapp.executors.remote import HeartbeatThread
+from django.core.management.base import BaseCommand
+
+from fastapp.executors.heartbeat import HeartbeatThread, inactivate
 from fastapp.defaults import *
 
 logger = logging.getLogger("fastapp.executors.remote")
@@ -15,6 +17,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         THREAD_COUNT = FASTAPP_HEARTBEAT_LISTENER_THREADCOUNT
         threads = []
+
+        inactivate_thread = threading.Thread(target=inactivate)
+        inactivate_thread.daemon = True
+        inactivate_thread.start()
+
         for c in range(0, THREAD_COUNT):
                 thread = HeartbeatThread(c, "HeartbeatThread-%s" % c, c, None, receiver=True)
                 self.stdout.write('Start HeartbeatThread')
