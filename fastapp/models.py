@@ -41,7 +41,7 @@ class AuthProfile(models.Model):
 class Base(models.Model):
     name = models.CharField(max_length=32)
     uuid = UUIDField(auto=True)
-    content = models.CharField(max_length=8192, blank=True, default=index_template)
+    content = models.CharField(max_length=16384, blank=True, default=index_template)
     user = models.ForeignKey(User, related_name='+', default=0, blank=True)
     public = models.BooleanField(default=False)
 
