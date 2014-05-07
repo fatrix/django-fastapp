@@ -10,7 +10,10 @@ from fastapp.queue import connect_to_queuemanager
 
 logger = logging.getLogger(__name__)
 
+RESPONSE_TIMEOUT = 10
+
 def distribute(event, apy, vhost, username, password):
+    logger.info("distribute called")
 
     class ExecutorClient(object):
         """
@@ -20,6 +23,12 @@ def distribute(event, apy, vhost, username, password):
         """
         def __init__(self, vhost, username, password):
             # get needed stuff
+            self.vhost = vhost
+            self.username = username
+            self.password = password
+            logger.debug("exchanging message to vhost : %s" % self.vhost)
+            logger.debug("exchanging message to vhost username: %s" % self.username)
+            logger.debug("exchanging message to vhost password: %s" % self.password)
             self.connection = connect_to_queuemanager(
                 vhost=vhost,
                 username=username,
@@ -52,12 +61,14 @@ def call_rpc_client(apy, vhost, username, password):
         """
         def __init__(self, vhost, username, password):
             # get needed stuff
+            self.vhost = vhost
             self.connection = connect_to_queuemanager(
                 vhost=vhost,
                 username=username,
                 password=password
                 )
 
+            logger.debug("exchanging message to vhost: %s" % self.vhost)
 
             self.channel = self.connection.channel()
 
@@ -72,18 +83,15 @@ def call_rpc_client(apy, vhost, username, password):
         #    apys = requests.get("http://localhost:8000/fastapp/api/base/23/apy/")
         def on_timeout(self):
             logger.error("timeout in waiting for response")
-            #return {u'status': u'TIMEOUT', u'exception': None, u'returned': None, 'id': u'cannot_import'}
             raise Exception("Timeout")
 
         def on_response(self, ch, method, props, body):
             if self.corr_id == props.correlation_id:
                 self.response = body
                 logger.debug("from rpc queue: "+body)
-                #print int(round(time.time() * 1000))
 
         def call(self, n):
-            logger.debug("to rpc queue: "+n)
-            self.connection.add_timeout(3, self.on_timeout)
+            self.connection.add_timeout(RESPONSE_TIMEOUT, self.on_timeout)
             self.response = None
             self.corr_id = str(uuid.uuid4())
             self.channel.basic_publish(exchange='',
@@ -129,6 +137,9 @@ class ExecutorServerThread(threading.Thread):
         self.username = username
         self.password = password
 
+        logger.info("exchanging message to vhost: %s" % self.vhost)
+        logger.info("exchanging message to vhost username: %s" % self.username)
+        logger.info("exchanging message to vhost password: %s" % self.password)
         # container for functions
         self.functions = {}
         # container for settings
@@ -184,7 +195,6 @@ class ExecutorServerThread(threading.Thread):
             def on_setting_request(ch, method, props, body):
                 json_body = json.loads(body)
                 key = json_body.keys()[0]
-                #fields = json.loads(body)[0]['fields']
                 self.settings.update(json_body)
                 logger.info("Setting '%s' received in %s" % (key, self.name))
 
@@ -225,9 +235,6 @@ class ApyNotFound(Exception):
 
 class ApyError(Exception):
     pass
-
-
-
 
 def _do(data, functions=None, settings=None):
         exception = None;  returned = None

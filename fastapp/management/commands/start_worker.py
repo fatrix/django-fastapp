@@ -30,21 +30,23 @@ class Command(BaseCommand):
             dest='base',
             default=None,
             help='Base for the worker'),
+        make_option('--vhost',
+            action='store',
+            dest='vhost',
+            default=None,
+            help='VHost on Queue system'),
         )
 
     def handle(self, *args, **options):
         threads = []
 
-
-        # generate config for worker
-        #vhost = "/"
-        #username = "guest"
-        #password = "guest"
-
         base = options['base']
+        vhost = options['vhost']
         username = options['username']
+        # TODO: password should come from database
         password = options['password']
-        vhost = generate_vhost_configuration(username, base)
+        #vhost = generate_vhost_configurationate_vhost_configuration(username, base)
+        logger.info("vhost: %s" % vhost)
 
         for c in range(1, FASTAPP_WORKER_THREADCOUNT):
 

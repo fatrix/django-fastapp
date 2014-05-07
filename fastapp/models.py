@@ -194,7 +194,12 @@ class Executor(models.Model):
     base = models.OneToOneField(Base, related_name="executor")
     num_instances = models.IntegerField(default=1)
     pid = models.CharField(max_length=10, null=True)
+    password = models.CharField(max_length=20, default=User.objects.make_random_password())
     #host = models.ForeignKey(Host)
+
+    @property
+    def vhost(self):
+        return generate_vhost_configuration(self.base.user.username, self.base.name)
 
     def start(self):
         logger.info("Start manage.py start_worker")
@@ -209,10 +214,11 @@ class Executor(models.Model):
         
         python_path = sys.executable
         try:
-            p = subprocess.Popen("%s %s/manage.py start_worker --settings=envs.local --base=%s --username=%s --password=%s" % (python_path, 
+            p = subprocess.Popen("%s %s/manage.py start_worker --settings=envs.local --vhost=%s --base=%s --username=%s --password=%s" % (python_path, 
                 settings.PROJECT_ROOT,
+                self.vhost,
                 self.base.name, 
-                self.base.user.username, self.base.user.username),
+                self.base.name, self.password),
                 cwd=settings.PROJECT_ROOT,
                 shell=True, stdin=None, stdout=None, stderr=None, preexec_fn=os.setsid)
             self.pid = p.pid
@@ -276,17 +282,17 @@ def synchronize_to_storage(sender, *args, **kwargs):
 
     distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]), 
         generate_vhost_configuration(instance.base.user.username, instance.base.name), 
-        instance.base.user.username, 
-        instance.base.user.username
+        instance.base.name, 
+        instance.base.executor.password
     )
 
 @receiver(post_save, sender=Setting)
 def send_to_workers(sender, *args, **kwargs):
     instance = kwargs['instance']
     distribute(SETTING_QUEUE, json.dumps({instance.key: instance.value}), 
-        generate_vhost_configuration(instance.base.user.username, instance.base.name), 
-        instance.base.user.username, 
-        instance.base.user.username
+        generate_vhost_configuration(instance.base.user.username, instance.base.name),
+        instance.base.name, 
+        instance.base.executor.password
     )
 
 @receiver(post_save, sender=Base)
@@ -297,9 +303,9 @@ def synchronize_base_to_storage(sender, *args, **kwargs):
     try:
         print instance.executor
     except Executor.DoesNotExist, e:
-        print "create executor"
+        logger.info("create executor")
         executor = Executor(base=instance)
-        print executor.save()
+        executor.save()
                 
 
     #try:
@@ -320,13 +326,14 @@ def base_to_storage_on_delete(sender, *args, **kwargs):
 @receiver(post_delete, sender=Apy)
 def synchronize_to_storage_on_delete(sender, *args, **kwargs):
     instance = kwargs['instance']
+    from utils import NotFound
     try:
         connection = Connection(instance.base.user.authprofile.access_token)
         gevent.spawn(connection.put_file("%s/app.config" % (instance.base.name), instance.base.config))
         gevent.spawn(connection.delete_file("%s/%s.py" % (instance.base.name, instance.name)))
-    except NotFound, e:
+    except NotFound:
         logger.exception("error in synchronize_to_storage_on_delete")
-    except Base.DoesNotExist, e:
+    except Base.DoesNotExist:
         # if post_delete is triggered from base.delete()
         pass
 

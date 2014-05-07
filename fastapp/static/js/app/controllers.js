@@ -120,6 +120,14 @@ window.app.controller('ExecCtrl', ['$scope', '$http', '$base64', 'Apy', 'Apy1', 
     Apy1.execute({'baseName': window.active_base, 'name': apy.name, 'json':""});
   };
 
+  $scope.printcurl=function(apy) {
+    var parser = document.createElement('a');
+    parser.href = document.URL;
+    add_client_message("user:   curl -u "+window.username+" -H'Cookie: "+document.cookie+"' \""+parser.protocol+"//"+parser.host+"/fastapp/"+window.active_base+"/exec/"+apy.name+"/?json=\"");
+    shared_key = window.shared_key_link.split("?")[1];
+    add_client_message("anonym: curl \""+parser.protocol+"//"+parser.host+"/fastapp/base/"+window.active_base+"/exec/"+apy.name+"/?json=&"+shared_key+"\"");
+  };
+
   $scope.rename=function($event) {
     new_exec_name = $($event.currentTarget.parentNode.parentNode).find('input').first().val();
     this.apy.name = new_exec_name;

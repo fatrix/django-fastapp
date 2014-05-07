@@ -29,6 +29,7 @@
             window.shared_key_link = "{{ active_base.shared }}";
             window.active_base = "{{ active_base.name }}";
             window.active_base_id = "{{ active_base.id }}";
+            window.username= "{{ username }}";
         </script>
        
         <!-- Pusher -->
@@ -249,6 +250,9 @@
 
                                 <button id="exec_{{ apy.name }}" type="button" class="btn btn-default btn-xs" ng-click="execute(apy)">
                                 <span class="glyphicon glyphicon-fire"></span> Execute</button>
+
+                                <button id="exec_{{ apy.name }}" type="button" class="btn btn-default btn-xs" ng-click="printcurl(apy)">
+                                <span class="glyphicon glyphicon-fire"></span> Curl command</button>
 
                                 <button id="rename_exec_{{ apy.name }}" type="button" class="btn btn-default btn-xs" ng-click="show = !show">
                                 <span class="glyphicon glyphicon-pencil"></span> Rename</button>
