@@ -96,7 +96,6 @@ class DjendExecView(View, DjendMixin):
     STATE_NOT_FOUND = "NOT_FOUND"
     STATE_TIMEOUT = "TIMEOUT"
 
-
 #    def _do(self, sfunc, do_kwargs):
 #        exception = None;  returned = None
 #        status = self.STATE_OK
@@ -197,7 +196,10 @@ class DjendExecView(View, DjendMixin):
             start = int(round(time.time() * 1000))
             response_data = call_rpc_client(json.dumps(rpc_request_data), 
                 #"/", "guest", "guest")
-                generate_vhost_configuration(self.request.user.username, base_model.name), self.request.user.username,  self.request.user.username)
+                #generate_vhost_configuration(self.request.user.username, base_model.name), 
+                generate_vhost_configuration(base_model.user.username, base_model.name), 
+                base_model.name, 
+                base_model.executor.password)
             end = int(round(time.time() * 1000))
             ms=str(end-start)
 
@@ -218,6 +220,7 @@ class DjendExecView(View, DjendMixin):
         response_class = data.get("response_class", None)
         # respond with json
         if request.GET.has_key('json') or request.GET.has_key('callback'):
+            logger.info("json response")
             user = channel_name_for_user(request)
             if data["status"] == "OK":
                 info(user, str(data))
@@ -264,13 +267,13 @@ class DjendExecView(View, DjendMixin):
 
         #return HttpResponse(data['returned'])
 
-    @csrf_exempt
+    @method_decorator(csrf_exempt)
     def post(self, request, *args, **kwargs):
         return DjendExecView.get(self, request, *args, **kwargs)
 
-    #@csrf_exempt
-    #def dispatch(self, *args, **kwargs):
-    #    return super(DjendExecView, self).dispatch(*args, **kwargs)
+    @method_decorator(csrf_exempt)
+    def dispatch(self, *args, **kwargs):
+        return super(DjendExecView, self).dispatch(*args, **kwargs)
 
 class DjendSharedView(View, ContextMixin):
 
@@ -295,6 +298,7 @@ class DjendSharedView(View, ContextMixin):
         context['FASTAPP_EXECS'] = base_model.apys.all().order_by('name')
         context['LAST_EXEC'] = request.GET.get('done')
         context['active_base'] = base_model
+        context['username'] = request.user.username
         context['FASTAPP_NAME'] = base_model.name
         context['DROPBOX_REDIRECT_URL'] = settings.DROPBOX_REDIRECT_URL
         context['PUSHER_KEY'] = settings.PUSHER_KEY
@@ -525,6 +529,7 @@ class DjendBaseView(View, ContextMixin):
                 context['CHANNEL'] = channel_name_for_user(request)
                 context['FASTAPP_STATIC_URL'] = "/%s/%s/static/" % ("fastapp", base)
                 context['active_base'] = base_model
+                context['username'] = request.user.username
                 context['LAST_EXEC'] = request.GET.get('done')
                 rs = base_model.template(context)
 
@@ -597,6 +602,7 @@ def dropbox_auth_finish(request):
         raise e
 
 
+@csrf_exempt
 def login_or_sharedkey(function):
     def wrapper(request, *args, **kwargs):
         logger.info("authenticate %s" % request.user)
@@ -608,6 +614,8 @@ def login_or_sharedkey(function):
         base_name = kwargs.get('base')
         if request.GET.has_key('shared_key'):
             shared_key = request.GET.get('shared_key')
+            logger.info(base_name)
+            logger.info(shared_key)
             get_object_or_404(Base, name=base_name, uuid=shared_key)
             request.session['shared_key'] = shared_key
             return function(request, *args, **kwargs)

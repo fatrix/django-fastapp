@@ -5,6 +5,7 @@ import logging
 import pika
 import time
 import threading
+from datetime import datetime
 
 from django.conf import settings
 
@@ -154,7 +155,14 @@ class PusherSenderThread(threading.Thread):
         data = body['data']
 
         logger.info("trigger")
-        p[channel].trigger(event, data)
+        logger.info(data)
+        try:
+            p[channel].trigger(event, data)
+        except Exception, e:
+            now=datetime.now()
+            p[channel].trigger(event, data = {'datetime': str(now), 'message': str(e), 'class': "error"})
+            logger.error("Cannot send data to pusher")
+            logger.exception(e)
         logger.info("pusher event sent")
         #logger.info("ack start")
         #ch.basic_ack(delivery_tag = method.delivery_tag)

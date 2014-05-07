@@ -1,14 +1,13 @@
 from django.conf.urls import patterns, url
 from django.contrib.auth.decorators import login_required
-from django.conf.urls import include
-from fastapp.views import DjendBaseView, DjendBaseSaveView, DjendBaseDeleteView, \
+from django.views.decorators.csrf import csrf_exempt
+from fastapp.views import DjendBaseView, DjendBaseDeleteView, DjendBaseSaveView, \
                 DjendBaseCreateView, DjendExecDeleteView, DjendExecView, DjendStaticView, \
                 login_or_sharedkey, dropbox_auth_finish, dropbox_auth_start, DjendView, \
                 DjendBaseSettingsView, DjendBaseRenameView
-from rest_framework import viewsets, routers
+from rest_framework import routers
 
-from fastapp.models import Base, Apy
-from fastapp.api_views import *
+from fastapp.api_views import BaseViewSet, SettingViewSet, ApyViewSet
 
 
 
@@ -37,7 +36,7 @@ urlpatterns = patterns('',
     # execs
     #url(r'(?P<base>[\w-]+)/create_exec/$', login_required(DjendExecSaveView.as_view())),
     url(r'(?P<base>[\w-]+)/exec/(?P<id>\w+)/$', \
-                                            login_or_sharedkey(DjendExecView.as_view())),
+                                            csrf_exempt(login_or_sharedkey(DjendExecView.as_view()))),
     url(r'(?P<base>[\w-]+)/delete/(?P<id>\w+)/$', \
                                             login_required(DjendExecDeleteView.as_view())),
     #url(r'(?P<base>[\w-]+)/clone/(?P<id>\w+)/$', \

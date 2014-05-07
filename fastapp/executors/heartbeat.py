@@ -124,6 +124,7 @@ class HeartbeatThread(threading.Thread):
         self.channel = channel
 
     def send_message(self):
+        logger.info("send message to vhost: %s" % self.vhost)
         self.channel.basic_publish(exchange='',
                 routing_key=HEARTBEAT_QUEUE,
                 properties=pika.BasicProperties(
@@ -172,8 +173,8 @@ class HeartbeatThread(threading.Thread):
                 distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]), 
                     #"philipsahli-aaaa", 
                     vhost,
-                    "philipsahli", 
-                    "philipsahli"
+                    instance.base.name,
+                    instance.base.executor.password
                     )
 
             for instance in Setting.objects.filter(base__name=base):
@@ -181,8 +182,8 @@ class HeartbeatThread(threading.Thread):
                     instance.key: instance.value
                     }), 
                     vhost,
-                    "philipsahli", 
-                    "philipsahli"
+                    instance.base.name,
+                    instance.base.executor.password
                 )
         logger.info(self.name+": ack")
         time.sleep(0.1)

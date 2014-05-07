@@ -67,14 +67,13 @@ class BaseViewSet(viewsets.ModelViewSet):
         return Base.objects.filter(user=self.request.user)
 
     def start(self, request, pk):
-        print "starting %s" % pk
+        logger.info("starting %s" % pk)
         base = self.get_queryset().get(id=pk)
         base.start()
-        #return Response()
         return self.retrieve(request, pk=pk)
 
     def stop(self, request, pk):
-        print "stopping %s" % pk
+        logger.info("stopping %s" % pk)
         base = self.get_queryset().get(id=pk)
         base.stop()
         return self.retrieve(request, pk=pk)
