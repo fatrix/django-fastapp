@@ -7,8 +7,11 @@ from django.db.models.signals import post_save
 from fastapp.models import Base, Apy, Executor, Counter, synchronize_to_storage, initialize_on_storage
 import json
 from mock import patch
+import logging
 
 class BaseTestCase(TransactionTestCase):
+
+	logging.disable(logging.DEBUG)
 
 	@patch("fastapp.models.distribute")
 	def setUp(self, distribute_mock):
@@ -160,6 +163,14 @@ class ApyExecutionTestCase(BaseTestCase):
 		self.assertEqual(response['Content-Type'], "application/xml")
 		from xml.dom import minidom
 		assert minidom.parseString(response.content)
+
+	def test_receive_json_when_response_is_JSONResponse(self, call_rpc_client_mock):
+		call_rpc_client_mock.return_value = json.dumps({u'status': u'OK', u'exception': None, u'returned': u'{"content": "{\\"aaa\\": \\"aaa\\"}", "class": "XMLResponse", "content_type": "application/json"}', u'response_class': u'JSONResponse', 'time_ms': '74', 'id': u'contenttype_test_receive'})
+		self.client_csrf.login(username='user1', password='pass')
+		response = self.client_csrf.get(self.base1_apy1.get_exec_url().replace("json=", ""))
+		self.assertEqual(200, response.status_code)
+		self.assertEqual(response['Content-Type'], "application/json")
+		assert json.loads(u''+response.content).has_key('aaa')
 
 @patch("fastapp.models.distribute")
 class SettingTestCase(BaseTestCase):
