@@ -20,3 +20,5 @@ class XMLResponse(Response):
 class HTMLResponse(Response):
 	CONTENT_TYPE = "text/html"
 
+class JSONResponse(Response):
+	CONTENT_TYPE = "application/json"

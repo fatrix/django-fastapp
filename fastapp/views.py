@@ -259,10 +259,16 @@ class DjendExecView(View, DjendMixin):
             elif response_class == u''+responses.HTMLResponse.__name__:
                 content_type = json.loads(data['returned'])['content_type']
                 content = json.loads(data['returned'])['content']
+            elif response_class == u''+responses.JSONResponse.__name__:
+                content_type = json.loads(data['returned'])['content_type']
+                #content = json.loads(data['returned'])['content']
+                content = json.loads(data['returned'])['content']
             else:
-                return HttpResponseServerError()
+                logger.error("Wrong response")
+                return HttpResponseServerError("You're apy did not return any allowed response-class or is not called with 'json' or 'callback' as querystring.")
             return HttpResponse(content, content_type)
 
+        logger.error("Not received json or callback query string nor response_class from response.")
         return HttpResponseServerError()
 
         #return HttpResponse(data['returned'])
