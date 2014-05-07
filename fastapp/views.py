@@ -3,6 +3,7 @@ import traceback
 import json
 import dropbox
 import time
+import copy
 
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
@@ -181,22 +182,28 @@ class DjendExecView(View, DjendMixin):
         rpc_request_data.update({'model': apy_data, 
                 'base_name': base_model.name,
             })
+        get_dict = copy.deepcopy(request.GET)
+        post_dict = copy.deepcopy(request.POST)
+        for key in ["json", "shared_key"]:
+            if request.method == "GET":
+                if get_dict.has_key(key): del get_dict[key]
+            if request.method == "POST":
+                if post_dict.has_key(key): del get_dict[key]
         rpc_request_data.update({'request': 
                 { 
                 'method': request.method,
-                'GET': request.GET.__dict__,
-                'POST': request.POST.__dict__,
-                'session': request.session.session_key,
+                'GET': get_dict.dict(),
+                'POST': post_dict.dict(),
+                #'session': request.session.session_key,
                 'user': {'username': request.user.username},
                 'REMOTE_ADDR': request.META.get('REMOTE_ADDR')
                 }
             })
+        logger.info("REQUEST-data: %s" % rpc_request_data)
         try:
             # _do on remote
             start = int(round(time.time() * 1000))
             response_data = call_rpc_client(json.dumps(rpc_request_data), 
-                #"/", "guest", "guest")
-                #generate_vhost_configuration(self.request.user.username, base_model.name), 
                 generate_vhost_configuration(base_model.user.username, base_model.name), 
                 base_model.name, 
                 base_model.executor.password)
