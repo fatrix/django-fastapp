@@ -41,7 +41,7 @@ class AuthProfile(models.Model):
 class Base(models.Model):
     name = models.CharField(max_length=32)
     uuid = UUIDField(auto=True)
-    content = models.CharField(max_length=8192, blank=True, default=index_template)
+    content = models.CharField(max_length=16384, blank=True, default=index_template)
     user = models.ForeignKey(User, related_name='+', default=0, blank=True)
     public = models.BooleanField(default=False)
 
@@ -149,7 +149,7 @@ MODULE_DEFAULT_CONTENT = """def func(self):\n    pass"""
 
 class Apy(models.Model):
     name = models.CharField(max_length=64)
-    module = models.CharField(max_length=8192, default=MODULE_DEFAULT_CONTENT)
+    module = models.CharField(max_length=16384, default=MODULE_DEFAULT_CONTENT)
     base = models.ForeignKey(Base, related_name="apys", blank=True, null=True)
     description = models.CharField(max_length=1024, blank=True, null=True)
 

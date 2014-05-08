@@ -241,6 +241,8 @@ def _do(data, functions=None, settings=None):
         status = STATE_OK
 
         request = Bunch(data['request'])
+        logger.info("REQUEST")
+        logger.info(request)
         base_name = data['base_name']
         model = json.loads(data['model'])
 
@@ -253,7 +255,6 @@ def _do(data, functions=None, settings=None):
         else:
             func = functions[model['fields']['name']]
             #print "REQUEST ARRIVED"
-            session = request['session']
             logger.info("do %s" % request)
             username = copy.copy(request['user']['username'])
 
@@ -269,7 +270,7 @@ def _do(data, functions=None, settings=None):
                 #exec model['fields']['module']
                 func.username=username
                 func.request=request
-                func.session=session
+                #func.session=session
 
                 func.name = model['fields']['name']
 
