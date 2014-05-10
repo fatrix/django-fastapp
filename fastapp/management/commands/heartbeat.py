@@ -4,7 +4,7 @@ import threading
 
 from django.core.management.base import BaseCommand
 
-from fastapp.executors.heartbeat import HeartbeatThread, inactivate
+from fastapp.executors.heartbeat import HeartbeatThread, inactivate, update_status
 from fastapp.defaults import *
 
 logger = logging.getLogger("fastapp.executors.remote")
@@ -22,12 +22,19 @@ class Command(BaseCommand):
         inactivate_thread.daemon = True
         inactivate_thread.start()
 
-        for c in range(0, THREAD_COUNT):
-                thread = HeartbeatThread(c, "HeartbeatThread-%s" % c, c, None, receiver=True)
-                self.stdout.write('Start HeartbeatThread')
-                threads.append(thread)
-                thread.daemon = True
-                thread.start()
+
+        #for c in range(0, THREAD_COUNT):
+        for c in range(0, 3):
+            name = "HeartbeatThread-%s" % c
+            thread = HeartbeatThread(c, name, c, None, receiver=True)
+            self.stdout.write('Start HeartbeatThread')
+            threads.append(thread)
+            thread.daemon = True
+            thread.start()
+
+        update_status_thread = threading.Thread(target=update_status, args=[3, threads])
+        update_status_thread.daemon = True
+        update_status_thread.start()
 
         for t in threads:
             #print "join %s " % t

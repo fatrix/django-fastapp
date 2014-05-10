@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from django.core import serializers
 from fastapp.executors.remote import distribute
-from fastapp.models import Instance, Base
+from fastapp.models import Instance, Heartbeat, Thread
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,39 @@ def inactivate():
                 instance.save()
             time.sleep(10)
     except Exception, e:
-        print e
-        pass
+        logger.exception(e)
+
+def update_status(thread_count, threads):
+    try:
+        while True:
+            #print threads
+            time.sleep(0.1)
+            alive_thread_count = 0
+            heartbeat, created = Heartbeat.objects.get_or_create(id=1)
+
+            for t in threads:
+                logger.info(t.name+": "+str(t.isAlive()))
+
+                # store in db
+                thread_model, created = Thread.objects.get_or_create(name=t.name, heartbeat=heartbeat)
+                if t.isAlive() and t.health():
+                    logger.info("Health (channel.is_open): "+str(t.health()))
+                    thread_model.started()
+                    alive_thread_count=alive_thread_count+1
+                else:
+                    thread_model.not_connected()
+                thread_model.save()
+            #thread_count = 4
+            if thread_count == alive_thread_count:
+                heartbeat.up()
+                heartbeat.save()
+                logger.info("Heartbeat is up.")
+            else:
+                logger.error("Heartbeat is down.")
+            time.sleep(2)
+
+    except Exception, e:
+        logger.exception(e)
 
 
 class HeartbeatThread(threading.Thread):
@@ -46,6 +77,8 @@ class HeartbeatThread(threading.Thread):
 
         self.in_sync = False
 
+        self.is_connected = False
+
     def run(self):
         self.parameters = pika.ConnectionParameters(host="localhost", heartbeat_interval=3)
         logger.info("starting " + self.name)
@@ -61,9 +94,12 @@ class HeartbeatThread(threading.Thread):
             try:
                 self._connection = pika.SelectConnection(self.parameters, self.on_connected, on_close_callback=self.on_close)
                 logger.info('connected')
+                self.is_connected = True 
             except Exception:
-                logger.warning('cannot connect', exc_info=True)
-                time.sleep(10)
+                self.is_connected = False
+                #logger.warning('cannot connect', exc_info=True)
+                logger.warning('cannot connect')
+                time.sleep(3)
                 continue
 
             try:
@@ -73,9 +109,7 @@ class HeartbeatThread(threading.Thread):
                 self.stop()
             finally:
                 pass
-                logger.info("interrupt2")
                 try:
-                    logger.info("interrupt3")
                     self._connection.close()
                     self._connection.ioloop.start() # allow connection to close
                 except Exception, e:
@@ -95,13 +129,17 @@ class HeartbeatThread(threading.Thread):
         self._run = False
         logger.info('Stopping')
         self._stopping = True
-        self.close_channel()
-        self.close_connection()
+        #self.close_channel()
+        #self.close_connection()
         self._connection.ioloop.start()
         logger.info('Stopped')
 
+    def health(self):
+        #return not self.channel.is_closed
+        return self.is_connected
 
     def on_close(self, connection, reply_code, reply_text):
+        self.connected = False
         logger.info(self.name+": "+sys._getframe().f_code.co_name)
 
     def consume_on_queue_declared(self, frame):
@@ -115,6 +153,7 @@ class HeartbeatThread(threading.Thread):
 
     def on_connected(self, connection):
         logger.info(self.name+": "+sys._getframe().f_code.co_name)
+        self.is_connected = True
         self._connection.channel(self.on_channel_open)
 
     def on_channel_open(self, channel):

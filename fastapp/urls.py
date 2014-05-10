@@ -4,12 +4,13 @@ from django.views.decorators.csrf import csrf_exempt
 from fastapp.views import DjendBaseView, DjendBaseDeleteView, DjendBaseSaveView, \
                 DjendBaseCreateView, DjendExecDeleteView, DjendExecView, DjendStaticView, \
                 login_or_sharedkey, dropbox_auth_finish, dropbox_auth_start, DjendView, \
-                DjendBaseSettingsView, DjendBaseRenameView
+                DjendBaseSettingsView, DjendBaseRenameView, CockpitView
 from rest_framework import routers
 
 from fastapp.api_views import BaseViewSet, SettingViewSet, ApyViewSet
 
 
+from django.views.decorators.cache import never_cache
 
 # Routers provide an easy way of automatically determining the URL conf
 router = routers.DefaultRouter(trailing_slash=True)
@@ -21,6 +22,8 @@ urlpatterns = patterns('',
     # dropbox auth
     url(r'dropbox_auth_start/?$',dropbox_auth_start),
     url(r'dropbox_auth_finish/?$',dropbox_auth_finish),
+
+    url(r'cockpit/$', login_required(never_cache(CockpitView.as_view(template_name="fastapp/cockpit.html")))),
 
     # base
     url(r'(?P<base>[\w-]+)/index/$', login_required(DjendBaseView.as_view())),

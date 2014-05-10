@@ -8,6 +8,8 @@ import signal
 import StringIO
 import gevent
 import json
+import pytz
+from datetime import datetime, timedelta
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -189,6 +191,45 @@ class Instance(models.Model):
 
 class Host(models.Model):
     name = models.CharField(max_length=50)
+
+
+
+class Heartbeat(models.Model):
+    running = models.DateTimeField(auto_now=True)
+
+    def up(self):
+        pass
+        #logger.info("Heartbeat is up")
+
+    def is_up(self):
+        now = datetime.utcnow().replace(tzinfo = pytz.utc)
+        delta = now - self.running
+        return (delta < timedelta(seconds=10))
+
+
+class Thread(models.Model):
+    STARTED = "SA"
+    STOPPED = "SO" 
+    NOT_CONNECTED = "NC" 
+    HEALTH_STATE_CHOICES = (
+        (STARTED, "Started"),
+        (STOPPED, "Stopped"),
+        (NOT_CONNECTED, "Not connected")
+        )
+
+    name = models.CharField(max_length=30, null=True)
+    heartbeat = models.ForeignKey(Heartbeat, related_name="threads", blank=True, null=True)
+    health = models.CharField(max_length=2, 
+                            choices=HEALTH_STATE_CHOICES, 
+                            default=STOPPED)
+
+    def started(self):
+        self.health = Thread.STARTED
+        self.save()
+
+    def not_connected(self):
+        self.health = Thread.NOT_CONNECTED
+        self.save()
 
 class Executor(models.Model):
     base = models.OneToOneField(Base, related_name="executor")

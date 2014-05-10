@@ -48,8 +48,6 @@ def send_to_pusher(ch, method, props, body):
 
 def consume(channel):
     logger.info("Start consuming on pusher_events")
-    #channel = connect_to_queue('pusher_events')
-    #channel.basic_qos(prefetch_count=1) 
     channel.basic_consume(send_to_pusher, queue='pusher_events')
     channel.start_consuming()
 
@@ -84,7 +82,8 @@ class PusherSenderThread(threading.Thread):
                 self._connection = pika.SelectConnection(self.parameters, self.on_connected, on_close_callback=self.on_close)
                 logger.info('connected')
             except Exception:
-                logger.warning('cannot connect', exc_info=True)
+                #logger.warning('cannot connect', exc_info=True)
+                logger.warning('cannot connect')
                 time.sleep(5)
                 continue
 
@@ -116,32 +115,6 @@ class PusherSenderThread(threading.Thread):
 
         self.channel = channel
 
-    ##def send_message(self):
-    #    self.channel.basic_publish(exchange='',
-    #            routing_key=HEARTBEAT_QUEUE,
-    #            properties=pika.BasicProperties(
-    #                #delivery_mode=1,
-    #                #reply_to = self.callback_queue,
-    #                #correlation_id = self.corr_id,
-    #            ),
-    #            body=json.dumps({
-    #                'in_sync': self.in_sync,
-    #                'vhost': self.vhost 
-    #                }))
-       # self.in_sync = True
-    #    self.schedule_next_message()
-#
-    #def schedule_next_message(self):
-    #    """If we are not closing our connection to RabbitMQ, schedule another
-    #    message to be delivered in PUBLISH_INTERVAL seconds.
-#
-#        """
-#        #if self._stopping:
-#        #    return
-#        logger.info('Next beat in %0.1f seconds',
-#                    self.PUBLISH_INTERVAL)
-#        self._connection.add_timeout(self.PUBLISH_INTERVAL,
-#                                     self.send_message)
 
     def on_beat(self, ch, method, props, body):
         logger.info(self.name+": "+sys._getframe().f_code.co_name)

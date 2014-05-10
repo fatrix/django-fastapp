@@ -12,7 +12,7 @@ from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
 from django.template import RequestContext
 from django.template.loader import render_to_string
-from django.views.generic import View
+from django.views.generic import View, TemplateView
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponseNotFound, HttpResponse, HttpResponseRedirect, HttpResponseBadRequest, HttpResponseForbidden, HttpResponseServerError
 from django.views.generic.base import ContextMixin
@@ -27,7 +27,7 @@ from fastapp import __version__ as version
 from utils import UnAuthorized, Connection, NoBasesFound
 from utils import info, error, warn, channel_name_for_user, debug, send_client
 from fastapp.queue import generate_vhost_configuration
-from fastapp.models import AuthProfile, Base, Apy, Setting, Executor
+from fastapp.models import AuthProfile, Base, Apy, Setting, Executor, Heartbeat, Thread
 from fastapp import responses
 
 from django.core.cache import cache
@@ -35,6 +35,16 @@ from django.core.cache import cache
 from fastapp.executors.remote import call_rpc_client
 
 logger = logging.getLogger(__name__)
+
+
+class CockpitView(TemplateView):
+
+    def get_context_data(self, **kwargs):
+        context = super(CockpitView, self).get_context_data(**kwargs)
+        context['executors'] = Executor.objects.all()
+        context['heartbeat'] = Heartbeat.objects.get(id=1)
+        context['threads'] = Thread.objects.all()
+        return context
 
 class DjendStaticView(View):
 
