@@ -1,12 +1,14 @@
-from django.core.management.base import BaseCommand
 import logging
 import sys
+import threading
 from optparse import make_option
 
+from django.core.management.base import BaseCommand
+
 from fastapp.executors.remote import ExecutorServerThread
-from fastapp.executors.heartbeat import HeartbeatThread
-from fastapp.queue import generate_vhost_configuration
-from fastapp.defaults import *
+from fastapp.executors.heartbeat import HeartbeatThread, HEARTBEAT_QUEUE, update_status
+from django.conf import settings
+
 
 logger = logging.getLogger("fastapp.executors.remote")
 
@@ -48,25 +50,40 @@ class Command(BaseCommand):
         #vhost = generate_vhost_configurationate_vhost_configuration(username, base)
         logger.info("vhost: %s" % vhost)
 
-        for c in range(1, FASTAPP_WORKER_THREADCOUNT):
+        for c in range(0, settings.FASTAPP_WORKER_THREADCOUNT):
 
             # start threads     
-            thread = ExecutorServerThread(c, "ExecutorServerThread-%s-%s" % (c, base), c, vhost, username, password)
-            self.stdout.write('Start ExecutorServerThread')
+            #thread = ExecutorServerThread(c, "ExecutorServerThread-%s-%s" % (c, base), c, vhost, username, password)
+            from fastapp.executors.remote import CONFIGURATION_QUEUE, RPC_QUEUE 
+            name = "ExecutorSrvThread-%s-%s" % (c, base)
+            thread = ExecutorServerThread(name, "localhost", vhost, 
+                queues_consume=[[RPC_QUEUE]], 
+                topic_receiver=[[CONFIGURATION_QUEUE]], 
+                username=username, 
+                password=password)
             threads.append(thread)
             thread.daemon = True
             thread.start()
 
-        thread = HeartbeatThread(c, "HeartbeatThread-%s" % c, c, vhost)
+        # increase thread_count by one because of HeartbeatThread
+        thread_count = settings.FASTAPP_WORKER_THREADCOUNT+1
+        update_status_thread = threading.Thread(target=update_status, args=[vhost, thread_count, threads])
+        update_status_thread.daemon = True
+        update_status_thread.start()        
+        
+
+        thread = HeartbeatThread("HeartbeatThread-%s" % c, "localhost", "/", 
+            queues_produce=[[HEARTBEAT_QUEUE]],
+            additional_payload={'vhost': vhost}
+            )
         self.stdout.write('Start HeartbeatThread')
         threads.append(thread)
         thread.daemon = True
         thread.start()
 
         for t in threads:
-            #print "join %s " % t
             try:
-                logger.info("%s Thread started" % FASTAPP_WORKER_THREADCOUNT)
+                logger.info("%s Thread started" % settings.FASTAPP_WORKER_THREADCOUNT)
                 t.join(1000)
             except KeyboardInterrupt:
                 print "Ctrl-c received."

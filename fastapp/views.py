@@ -27,7 +27,7 @@ from fastapp import __version__ as version
 from utils import UnAuthorized, Connection, NoBasesFound
 from utils import info, error, warn, channel_name_for_user, debug, send_client
 from fastapp.queue import generate_vhost_configuration
-from fastapp.models import AuthProfile, Base, Apy, Setting, Executor, Heartbeat, Thread
+from fastapp.models import AuthProfile, Base, Apy, Setting, Executor, Process, Thread
 from fastapp import responses
 
 from django.core.cache import cache
@@ -41,9 +41,9 @@ class CockpitView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super(CockpitView, self).get_context_data(**kwargs)
-        context['executors'] = Executor.objects.all()
-        context['heartbeat'] = Heartbeat.objects.get(id=1)
-        context['threads'] = Thread.objects.all()
+        context['executors'] = Executor.objects.all().order_by('base__name')
+        context['process_list'] = Process.objects.all()
+        context['threads'] = Thread.objects.all().order_by('parent__name', 'name')
         return context
 
 class DjendStaticView(View):
@@ -209,7 +209,7 @@ class DjendExecView(View, DjendMixin):
                 'REMOTE_ADDR': request.META.get('REMOTE_ADDR')
                 }
             })
-        logger.info("REQUEST-data: %s" % rpc_request_data)
+        logger.debug("REQUEST-data: %s" % rpc_request_data)
         try:
             # _do on remote
             start = int(round(time.time() * 1000))
@@ -235,16 +235,22 @@ class DjendExecView(View, DjendMixin):
             })
 
         response_class = data.get("response_class", None)
+        response_status_code = 200
         # respond with json
         if request.GET.has_key('json') or request.GET.has_key('callback'):
-            logger.info("json response")
             user = channel_name_for_user(request)
             if data["status"] == "OK":
                 info(user, str(data))
                 exec_model.mark_executed()
-            elif data["status"] in [self.STATE_NOK, self.STATE_NOT_FOUND, self.STATE_TIMEOUT]:
+            else:
                 error(user, str(data))
                 exec_model.mark_failed()
+            if data["status"] in [self.STATE_NOK]:
+                response_status_code = 500
+            elif data["status"] in [self.STATE_NOT_FOUND]:
+                response_status_code = 404
+            elif data["status"] in [self.STATE_TIMEOUT]:
+                response_status_code = 502
 
             # send counter to client
             cdata = {
@@ -261,12 +267,12 @@ class DjendExecView(View, DjendMixin):
             if isinstance(data['returned'], HttpResponseRedirect):
                 location = data['returned']['Location']
                 info(user, "(%s) Redirect to: %s" % (exec_id, location))
-                return HttpResponse(json.dumps({'redirect': data['returned']['Location']}), content_type="application/json")
+                return HttpResponse(json.dumps({'redirect': data['returned']['Location']}), content_type="application/json", status=response_status_code)
             else:
                 if request.GET.has_key('callback'):
                     data = '%s(%s);' % (request.REQUEST['callback'], json.dumps(data))
                     return HttpResponse(data, "application/javascript")
-                return HttpResponse(json.dumps(data), content_type="application/json")
+                return HttpResponse(json.dumps(data), content_type="application/json", status=response_status_code)
 
         # real response
         elif response_class:
@@ -283,7 +289,7 @@ class DjendExecView(View, DjendMixin):
             else:
                 logger.error("Wrong response")
                 return HttpResponseServerError("You're apy did not return any allowed response-class or is not called with 'json' or 'callback' as querystring.")
-            return HttpResponse(content, content_type)
+            return HttpResponse(content, content_type, status=response_status_code)
 
         logger.error("Not received json or callback query string nor response_class from response.")
         return HttpResponseServerError()

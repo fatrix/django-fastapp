@@ -46,7 +46,7 @@ class Connection(object):
         return bases
 
     def get_file(self, path):
-        logger.info("get file %s" % path)
+        logger.debug("get file %s" % path)
         return self._call('get_file', path).read()
 
     def put_file(self, path, content):
@@ -110,7 +110,7 @@ def channel_name_for_user_by_user(user):
 
 from queue import connect_to_queue
 def send_client(channel_name, event, data):
-    logger.info("START EVENT_TO_QUEUE %s" % event)
+    logger.debug("START EVENT_TO_QUEUE %s" % event)
 
     channel = connect_to_queue('localhost', 'pusher_events')
     #channel = pusher
@@ -128,7 +128,7 @@ def send_client(channel_name, event, data):
                             delivery_mode=1,
                          ),
                         )
-    logger.info("END EVENT_TO_QUEUE %s" % event)
+    logger.debug("END EVENT_TO_QUEUE %s" % event)
 
 
 
@@ -173,8 +173,9 @@ if any(arg.startswith('run') for arg in sys.argv):
     # create connection to pusher_queue
     logger.info("Start sending events to pusher")
     for c in range(1, 3):
-        thread = PusherSenderThread(c, "PusherSenderThread-%s" % c, c, "/")
-        logger.debug('Start PusherSenderThread')
+        name = "PusherSenderThread-%s" % c
+        thread = PusherSenderThread(c, name, c, "/")
+        logger.info("Start '%s'" % name)
         threads.append(thread)
         thread.daemon = True
         thread.start()
