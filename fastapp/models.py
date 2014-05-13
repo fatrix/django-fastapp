@@ -8,6 +8,8 @@ import signal
 import StringIO
 import gevent
 import json
+import pytz
+from datetime import datetime, timedelta
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -19,7 +21,7 @@ from django.db.models import F
 from django.db.transaction import commit_on_success
 from django.conf import settings
 from fastapp.queue import generate_vhost_configuration
-from fastapp.executors.remote import distribute, CONFIGURATION_QUEUE, SETTING_QUEUE
+from fastapp.executors.remote import distribute, CONFIGURATION_EVENT, SETTINGS_EVENT
 
 from django.core import serializers
 
@@ -185,16 +187,61 @@ class Instance(models.Model):
 
     def mark_down(self):
         self.is_alive = False
+
+        # restart
+        #self.executor.start()
+
         self.save()
 
 class Host(models.Model):
     name = models.CharField(max_length=50)
+
+
+
+class Process(models.Model):
+    running = models.DateTimeField(auto_now=True)
+    name = models.CharField(max_length=64, null=True)
+
+    def up(self):
+        pass
+        #logger.info("Heartbeat is up")
+
+    def is_up(self):
+        now = datetime.utcnow().replace(tzinfo = pytz.utc)
+        delta = now - self.running
+        return (delta < timedelta(seconds=10))
+
+
+class Thread(models.Model):
+    STARTED = "SA"
+    STOPPED = "SO" 
+    NOT_CONNECTED = "NC" 
+    HEALTH_STATE_CHOICES = (
+        (STARTED, "Started"),
+        (STOPPED, "Stopped"),
+        (NOT_CONNECTED, "Not connected")
+        )
+
+    name = models.CharField(max_length=64, null=True)
+    parent = models.ForeignKey(Process, related_name="threads", blank=True, null=True)
+    health = models.CharField(max_length=2, 
+                            choices=HEALTH_STATE_CHOICES, 
+                            default=STOPPED)
+
+    def started(self):
+        self.health = Thread.STARTED
+        self.save()
+
+    def not_connected(self):
+        self.health = Thread.NOT_CONNECTED
+        self.save()
 
 class Executor(models.Model):
     base = models.OneToOneField(Base, related_name="executor")
     num_instances = models.IntegerField(default=1)
     pid = models.CharField(max_length=10, null=True)
     password = models.CharField(max_length=20, default=User.objects.make_random_password())
+    started = models.BooleanField(default=False)
     #host = models.ForeignKey(Host)
 
     @property
@@ -214,18 +261,22 @@ class Executor(models.Model):
         
         python_path = sys.executable
         try:
-            p = subprocess.Popen("%s %s/manage.py start_worker --settings=envs.local --vhost=%s --base=%s --username=%s --password=%s" % (python_path, 
-                settings.PROJECT_ROOT,
-                self.vhost,
-                self.base.name, 
-                self.base.name, self.password),
-                cwd=settings.PROJECT_ROOT,
-                shell=True, stdin=None, stdout=None, stderr=None, preexec_fn=os.setsid)
+            p = subprocess.Popen("%s %s/manage.py start_worker --settings=%s --vhost=%s --base=%s --username=%s --password=%s" % (
+                    python_path, 
+                    settings.PROJECT_ROOT,
+                    settings.SETTINGS_MODULE,
+                    self.vhost,
+                    self.base.name, 
+                    self.base.name, self.password),
+                    cwd=settings.PROJECT_ROOT,
+                    shell=True, stdin=None, stdout=None, stderr=None, preexec_fn=os.setsid
+                )
             self.pid = p.pid
         except Exception, e:
             logger.exception(e)
             raise e
         logger.info("%s: worker started with pid %s" % (self, self.pid))
+        self.started = True
         self.save()
 
     def stop(self):
@@ -236,6 +287,7 @@ class Executor(models.Model):
             logger.exception(e)
         if not self.is_running():
             self.pid = None
+            self.started = True
             self.save()
 
     def is_running(self):
@@ -280,7 +332,7 @@ def synchronize_to_storage(sender, *args, **kwargs):
         counter = Counter(apy=instance)
         counter.save()
 
-    distribute(CONFIGURATION_QUEUE, serializers.serialize("json", [instance,]), 
+    distribute(CONFIGURATION_EVENT, serializers.serialize("json", [instance,]), 
         generate_vhost_configuration(instance.base.user.username, instance.base.name), 
         instance.base.name, 
         instance.base.executor.password
@@ -289,7 +341,7 @@ def synchronize_to_storage(sender, *args, **kwargs):
 @receiver(post_save, sender=Setting)
 def send_to_workers(sender, *args, **kwargs):
     instance = kwargs['instance']
-    distribute(SETTING_QUEUE, json.dumps({instance.key: instance.value}), 
+    distribute(SETTINGS_EVENT, json.dumps({instance.key: instance.value}), 
         generate_vhost_configuration(instance.base.user.username, instance.base.name),
         instance.base.name, 
         instance.base.executor.password

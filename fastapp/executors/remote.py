@@ -3,17 +3,20 @@ import uuid
 import json
 import copy
 import logging
-import threading
+import sys
 import traceback
 from bunch import Bunch
-from fastapp.queue import connect_to_queuemanager
+from fastapp.queue import connect_to_queuemanager, CommunicationThread
 
 logger = logging.getLogger(__name__)
 
 RESPONSE_TIMEOUT = 10
+CONFIGURATION_QUEUE = "configuration"
+CONFIGURATION_EVENT = "configuration"
+SETTINGS_EVENT = "settings"
 
-def distribute(event, apy, vhost, username, password):
-    logger.info("distribute called")
+def distribute(event, body, vhost, username, password):
+    logger.debug("distribute called")
 
     class ExecutorClient(object):
         """
@@ -21,9 +24,10 @@ def distribute(event, apy, vhost, username, password):
         Then the client is ready to response for execution requests.
 
         """
-        def __init__(self, vhost, username, password):
+        def __init__(self, vhost, event, username, password):
             # get needed stuff
             self.vhost = vhost
+            self.event = event 
             self.username = username
             self.password = password
             logger.debug("exchanging message to vhost : %s" % self.vhost)
@@ -36,18 +40,19 @@ def distribute(event, apy, vhost, username, password):
                 )
 
             self.channel = self.connection.channel()
-            self.channel.exchange_declare(exchange=event, type='fanout')
+            self.channel.exchange_declare(exchange=CONFIGURATION_QUEUE, type='fanout')
 
 
         def call(self, body):
-            self.channel.basic_publish(exchange=event,
+            self.channel.basic_publish(exchange=CONFIGURATION_QUEUE,
                                        routing_key='',
-                                       body=body)
+                                       body=body,
+                                       properties=pika.BasicProperties(app_id=event))
 
             self.connection.close()
 
-    executor = ExecutorClient(vhost, username, password)
-    executor.call(apy)
+    executor = ExecutorClient(vhost, event, username, password)
+    executor.call(body)
 
     return  True
 
@@ -125,80 +130,83 @@ CONFIGURATION_QUEUE = "configuration"
 SETTING_QUEUE = "setting"
 RPC_QUEUE = "rpc_queue"
 
-class ExecutorServerThread(threading.Thread):
-    def __init__(self, threadID, name, counter, vhost, username, password):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
-        self.name = name
-        self.counter = counter
-
+class ExecutorServerThread(CommunicationThread):
+    def __init__(self, *args, **kwargs ):
         # adds
-        self.vhost = vhost
-        self.username = username
-        self.password = password
+        #self.vhost = vhost
+        #self.username = username
+        #self.password = password
 
-        logger.info("exchanging message to vhost: %s" % self.vhost)
-        logger.info("exchanging message to vhost username: %s" % self.username)
-        logger.info("exchanging message to vhost password: %s" % self.password)
+        #logger.info("exchanging message to vhost: %s" % self.vhost)
+        #logger.info("exchanging message to vhost username: %s" % self.username)
+        #logger.info("exchanging message to vhost password: %s" % self.password)
         # container for functions
         self.functions = {}
         # container for settings
         self.settings = {}
 
-    def run(self):
-        print "Starting " + self.name
-        self.listen()
+        return super(ExecutorServerThread, self).__init__(*args, **kwargs)
 
-    def listen(self):
-        # open connection and channel
+    #def run(self):
+    #    print "Starting " + self.name
+    #    self.listen()
+
+    #def listen(self):
+    #    # open connection and channel
+    #    try:
+    #        connection = connect_to_queuemanager(
+    #                vhost=self.vhost,
+    #                username=self.username,
+    #                password=self.password
+    #                )
+    #        channel = connection.channel()
+#
+#
+#            # configuration
+#            channel.exchange_declare(exchange=CONFIGURATION_QUEUE, type='fanout')
+#            result = channel.queue_declare(exclusive=True)
+#            self.queue_name = result.method.queue
+#            channel.queue_bind(exchange=CONFIGURATION_QUEUE, queue=self.queue_name)
+#
+#            # setting
+#            channel.exchange_declare(exchange=SETTING_QUEUE, type='fanout')
+#            result = channel.queue_declare(exclusive=True)
+#            self.setting_queue_name = result.method.queue
+#            channel.queue_bind(exchange=SETTING_QUEUE, queue=self.setting_queue_name)
+#
+#            # listen for rpc events
+#            channel.queue_declare(queue=RPC_QUEUE)
+
+    def on_message(self, ch, method, props, body):
+        logger.debug(self.name+": "+sys._getframe().f_code.co_name)
+        logger.debug(ch)
+        logger.debug(method)
+        logger.debug(props.app_id)
+        logger.debug(body)
         try:
-            connection = connect_to_queuemanager(
-                    vhost=self.vhost,
-                    username=self.username,
-                    password=self.password
-                    )
-            channel = connection.channel()
+            if method.exchange == "configuration":
+                print "EVENT ARRIVED"
+                if props.app_id == "configuration":
+                    fields = json.loads(body)[0]['fields']
+                    try:
+                        exec fields['module'] in globals(), locals()
+                        self.functions.update({
+                            fields['name']: func,
+                            })
+                        logger.info("Configuration '%s' received in %s" % (fields['name'], self.name))
+                    except Exception, e:
+                        logger.exception(e)
 
-
-            # listen for configuration events on topic configuration
-            # configuration are:
-            #    - settings
-            #    - apys
-            # configuration
-            channel.exchange_declare(exchange=CONFIGURATION_QUEUE, type='fanout')
-            result = channel.queue_declare(exclusive=True)
-            self.queue_name = result.method.queue
-            channel.queue_bind(exchange=CONFIGURATION_QUEUE, queue=self.queue_name)
-            # setting
-            channel.exchange_declare(exchange=SETTING_QUEUE, type='fanout')
-            result = channel.queue_declare(exclusive=True)
-            self.setting_queue_name = result.method.queue
-            channel.queue_bind(exchange=SETTING_QUEUE, queue=self.setting_queue_name)
-
-            # listen for rpc events
-            channel.queue_declare(queue=RPC_QUEUE)
-
-            def on_configuration_request(ch, method, props, body):
-                fields = json.loads(body)[0]['fields']
-                #exec fields['module'] in globals(), locals()
-                #exec fields['module'] in globals(), globals()
-                #exec fields['module'] in globals(), locals()
-                try:
-                    exec fields['module'] in globals(), locals()
-                    self.functions.update({
-                        fields['name']: func,
-                        })
-                    logger.info("Configuration '%s' received in %s" % (fields['name'], self.name))
-                except Exception, e:
-                    logger.exception(e)
-
-            def on_setting_request(ch, method, props, body):
-                json_body = json.loads(body)
-                key = json_body.keys()[0]
-                self.settings.update(json_body)
-                logger.info("Setting '%s' received in %s" % (key, self.name))
-
-            def on_rpc_request(ch, method, props, body):
+                elif props.app_id == "setting":
+                    json_body = json.loads(body)
+                    key = json_body.keys()[0]
+                    self.settings.update(json_body)
+                    logger.info("Setting '%s' received in %s" % (key, self.name))
+                else:
+                    logger.error("invalid event arrived")
+    #
+            if method.routing_key == RPC_QUEUE:
+    #            def on_message(ch, method, props, body):
                 logger.info("Request received in %s" % self.name)
                 try:
                     response_data = {}
@@ -215,17 +223,20 @@ class ExecutorServerThread(threading.Thread):
                                         ),
                                      body=json.dumps(response_data))
                     ch.basic_ack(delivery_tag = method.delivery_tag)
-
-            channel.basic_qos(prefetch_count=3)
-            channel.basic_consume(on_rpc_request, queue=RPC_QUEUE)
-            channel.basic_consume(on_configuration_request, queue=self.queue_name, no_ack=True)
-            channel.basic_consume(on_setting_request, queue=self.setting_queue_name, no_ack=True)
-
-            logger.info("Waiting for events")
-            channel.start_consuming()
         except Exception, e:
-            logger.error("Connection closed")
             logger.exception(e)
+
+#
+#            channel.basic_qos(prefetch_count=3)
+#            channel.basic_consume(on_message, queue=RPC_QUEUE)
+#            channel.basic_consume(on_configuration_request, queue=self.queue_name, no_ack=True)
+#            channel.basic_consume(on_setting_request, queue=self.setting_queue_name, no_ack=True)
+#
+#            logger.info("Waiting for events")
+#            channel.start_consuming()
+#        except Exception, e:
+#            logger.error("Connection closed")
+#            logger.exception(e)
 
 
 
@@ -255,7 +266,7 @@ def _do(data, functions=None, settings=None):
         else:
             func = functions[model['fields']['name']]
             #print "REQUEST ARRIVED"
-            logger.info("do %s" % request)
+            logger.debug("do %s" % request)
             username = copy.copy(request['user']['username'])
 
             # debug incoming request
