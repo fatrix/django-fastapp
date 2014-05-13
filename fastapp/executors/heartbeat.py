@@ -31,6 +31,7 @@ def inactivate():
             # start if is_started and not running    
             for executor in Executor.objects.filter(started=True):
                 if not executor.is_running():
+                    # log start with last beat datetime
                     executor.start()
             time.sleep(10)
     except Exception, e:

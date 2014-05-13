@@ -287,7 +287,7 @@ class Executor(models.Model):
             logger.exception(e)
         if not self.is_running():
             self.pid = None
-            self.started = True
+            self.started = False
             self.save()
 
     def is_running(self):
